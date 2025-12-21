@@ -1,7 +1,7 @@
 .hero {
   margin-top: 80px;
-  padding: 6rem 5% 4rem;
-  background: linear-gradient(135deg, var(--dark) 0%, var(--dark-green) 100%);
+  padding: 4rem 5% 3rem;
+  background: var(--white);
   text-align: center;
 }
 
@@ -11,21 +11,20 @@
 }
 
 .hero h1 {
-  font-size: 3.5rem;
+  font-size: 2.5rem;
   margin-bottom: 1.5rem;
-  color: var(--light-green);
+  color: var(--text-dark);
   line-height: 1.2;
 }
 
 .hero h1 .highlight {
-  color: var(--medium-green);
+  color: var(--teal);
 }
 
 .hero p {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   margin-bottom: 2.5rem;
-  color: var(--light-green);
-  opacity: 0.9;
+  color: var(--text-light);
 }
 
 .hero-buttons {
@@ -36,46 +35,47 @@
 }
 
 .btn-primary {
-  background-color: var(--medium-green);
-  color: var(--dark);
-  padding: 1rem 2.5rem;
+  background-color: var(--teal);
+  color: white;
+  padding: 0.85rem 2rem;
   border: none;
-  border-radius: 8px;
-  font-size: 1.1rem;
+  border-radius: 6px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
 }
 
 .btn-primary:hover {
-  background-color: var(--light-green);
+  background-color: var(--teal-dark);
   transform: translateY(-3px);
-  box-shadow: 0 6px 20px rgba(78, 159, 61, 0.4);
+  box-shadow: 0 12px 30px rgba(20, 184, 166, 0.4);
 }
 
 .btn-secondary {
   background-color: transparent;
-  color: var(--light-green);
-  padding: 1rem 2.5rem;
-  border: 2px solid var(--medium-green);
-  border-radius: 8px;
-  font-size: 1.1rem;
+  color: var(--text-dark);
+  padding: 0.85rem 2rem;
+  border: 2px solid var(--teal);
+  border-radius: 6px;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
 }
 
 .btn-secondary:hover {
-  background-color: var(--dark-green);
-  border-color: var(--light-green);
+  background-color: rgba(20, 184, 166, 0.1);
+  border-color: var(--teal-dark);
+  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.2);
 }
 
 @media (max-width: 768px) {
   .hero h1 {
-    font-size: 2.5rem;
+    font-size: 2rem;
   }
 
   .hero p {
-    font-size: 1.1rem;
+    font-size: 1rem;
   }
 }

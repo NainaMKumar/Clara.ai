@@ -1,12 +1,12 @@
 .navbar {
-  background-color: rgba(25, 26, 25, 0.95);
-  padding: 1.5rem 5%;
+  background-color: rgba(255, 255, 255, 0.95);
+  padding: 1rem 5%;
   position: fixed;
   width: 100%;
   top: 0;
   z-index: 1000;
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--dark-green);
+  border-bottom: 1px solid rgba(20, 184, 166, 0.1);
 }
 
 .navbar-container {
@@ -18,14 +18,14 @@
 }
 
 .logo {
-  font-size: 1.8rem;
+  font-size: 1.4rem;
   font-weight: bold;
-  color: var(--medium-green);
+  color: var(--text-dark);
+}
+.logo:hover{
+  color: var(--teal);
 }
 
-.logo span {
-  color: var(--light-green);
-}
 
 .nav-links {
   display: flex;
@@ -35,28 +35,38 @@
 }
 
 .nav-links a {
-  color: var(--light-green);
+  color: var(--text-dark);
   text-decoration: none;
   transition: color 0.3s;
+  font-size: 0.95rem;
 }
 
 .nav-links a:hover {
-  color: var(--medium-green);
+  color: var(--teal);
+}
+
+.nav-links .cta-button {
+  color: white;
+}
+
+.nav-links .cta-button:hover {
+  color: white;
 }
 
 .cta-button {
-  background-color: var(--medium-green);
-  color: var(--dark);
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background-color: var(--teal);
+  color: white;
+  padding: 0.6rem 1.5rem;
+  border-radius: 6px;
   font-weight: 600;
-  transition: all 0.3s;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
 }
 
 .cta-button:hover {
-  background-color: var(--light-green);
+  background-color: var(--teal-dark);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(78, 159, 61, 0.3);
+  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.3);
 }
 
 @media (max-width: 768px) {

@@ -1,13 +1,13 @@
 .how-it-works {
-  padding: 5rem 5%;
-  background: linear-gradient(135deg, var(--dark-green) 0%, var(--dark) 100%);
+  padding: 4rem 5%;
+  background: var(--white);
 }
 
 .how-it-works h2 {
   text-align: center;
-  font-size: 2.5rem;
+  font-size: 2rem;
   margin-bottom: 3rem;
-  color: var(--light-green);
+  color: var(--text-dark);
 }
 
 .steps {
@@ -27,25 +27,25 @@
 .step-number {
   width: 80px;
   height: 80px;
-  background-color: var(--medium-green);
-  color: var(--dark);
+  background-color: var(--teal);
+  color: white;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: bold;
 }
 
 .step-content h3 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   margin-bottom: 0.5rem;
-  color: var(--medium-green);
+  color: var(--teal);
 }
 
 .step-content p {
-  color: var(--light-green);
-  opacity: 0.9;
+  color: var(--text-light);
+  font-size: 0.95rem;
 }
 
 @media (max-width: 768px) {

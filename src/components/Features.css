@@ -1,13 +1,13 @@
 .features {
-  padding: 5rem 5%;
-  background-color: var(--dark);
+  padding: 4rem 5%;
+  background-color: var(--white);
 }
 
 .features h2 {
   text-align: center;
-  font-size: 2.5rem;
+  font-size: 2rem;
   margin-bottom: 3rem;
-  color: var(--light-green);
+  color: var(--text-dark);
 }
 
 .features-grid {
@@ -19,31 +19,33 @@
 }
 
 .feature-card {
-  background: linear-gradient(135deg, var(--dark-green) 0%, rgba(30, 81, 40, 0.5) 100%);
+  background: var(--white);
   padding: 2rem;
   border-radius: 12px;
-  border: 1px solid var(--medium-green);
-  transition: all 0.3s;
+  border: 1px solid rgba(20, 184, 166, 0.2);
+  transition: all 0.3s ease;
 }
 
 .feature-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 8px 24px rgba(78, 159, 61, 0.3);
-  border-color: var(--light-green);
+  box-shadow: 0 12px 30px rgba(20, 184, 166, 0.2);
+  border-color: var(--teal);
+  background: rgba(20, 184, 166, 0.05);
 }
 
 .feature-icon {
-  font-size: 3rem;
+  font-size: 2.5rem;
   margin-bottom: 1rem;
+  display: none;
 }
 
 .feature-card h3 {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   margin-bottom: 1rem;
-  color: var(--medium-green);
+  color: var(--teal);
 }
 
 .feature-card p {
-  color: var(--light-green);
-  opacity: 0.9;
+  color: var(--text-light);
+  font-size: 0.95rem;
 }

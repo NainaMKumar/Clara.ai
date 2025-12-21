@@ -1,8 +1,10 @@
 .footer {
-  background-color: var(--dark-green);
+  background: var(--white);
   padding: 2rem 5%;
   text-align: center;
-  color: var(--light-green);
+  color: var(--text-light);
+  border-top: 1px solid rgba(20, 184, 166, 0.1);
+  font-size: 0.9rem;
 }
 
 .footer-links {
@@ -10,10 +12,10 @@
 }
 
 .footer a {
-  color: var(--medium-green);
+  color: var(--teal);
   text-decoration: none;
 }
 
 .footer a:hover {
-  color: var(--light-green);
+  color: var(--teal-dark);
 }

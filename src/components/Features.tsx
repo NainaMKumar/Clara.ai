@@ -9,32 +9,32 @@ interface Feature {
 
 const features: Feature[] = [
   {
-    icon: '🎙️',
+    icon: '',
     title: 'Record Lectures',
     description: 'Capture every word with built-in audio recording. Focus on understanding while Clara handles the documentation.'
   },
   {
-    icon: '⚡',
+    icon: '',
     title: 'TAB Autocompletion',
     description: 'Missed something? Just press TAB and let AI complete your thoughts based on the lecture context and your notes.'
   },
   {
-    icon: '✨',
+    icon: '',
     title: 'AI-Powered Assistance',
     description: 'Get intelligent comments, suggestions, and formatting help. AI enhances your notes without taking over.'
   },
   {
-    icon: '📝',
+    icon: '',
     title: 'Your Style, Your Way',
     description: 'Write notes how you want. Clara adapts to your style while offering help when you need it.'
   },
   {
-    icon: '🔄',
+    icon: '',
     title: 'Smart Reformatting',
     description: 'Transform messy lecture notes into organized, structured documents with one click.'
   },
   {
-    icon: '💡',
+    icon: '',
     title: 'Contextual Comments',
     description: 'AI adds helpful explanations, definitions, and connections to make your notes more valuable.'
   }

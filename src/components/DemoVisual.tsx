@@ -19,7 +19,7 @@ const DemoVisual: React.FC = () => {
             - Water molecules are split to release{' '}
             <span className="tab-hint">TAB to complete</span>
           </div>
-          <div className="demo-line recording">🎙️ Recording... 15:23</div>
+          <div className="demo-line recording">Recording... 15:23</div>
         </div>
       </div>
     </div>

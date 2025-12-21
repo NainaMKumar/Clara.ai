@@ -7,11 +7,13 @@ const Hero: React.FC = () => {
     <section className="hero">
       <div className="hero-content">
         <h1>
-          Take Notes Your Way, <span className="highlight">Powered by AI</span>
+          Notetaking like, <span className="highlight">Vibecoding.</span>
         </h1>
         <p>
-          The flexible note-taking app built for students. Record lectures, get AI-powered
-          autocompletion, and never miss a detail again.
+          Clara is the first AI-powered notetaking app that integrates into your notetaking workflow.
+          We want you to take the notes. 
+          We want you to be in control. 
+          But let us make your life a little easier.
         </p>
         <div className="hero-buttons">
           <button className="btn-primary">Start Free Trial</button>
