@@ -1,0 +1,81 @@
+.hero {
+  margin-top: 80px;
+  padding: 6rem 5% 4rem;
+  background: linear-gradient(135deg, var(--dark) 0%, var(--dark-green) 100%);
+  text-align: center;
+}
+
+.hero-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.hero h1 {
+  font-size: 3.5rem;
+  margin-bottom: 1.5rem;
+  color: var(--light-green);
+  line-height: 1.2;
+}
+
+.hero h1 .highlight {
+  color: var(--medium-green);
+}
+
+.hero p {
+  font-size: 1.3rem;
+  margin-bottom: 2.5rem;
+  color: var(--light-green);
+  opacity: 0.9;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  background-color: var(--medium-green);
+  color: var(--dark);
+  padding: 1rem 2.5rem;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary:hover {
+  background-color: var(--light-green);
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(78, 159, 61, 0.4);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--light-green);
+  padding: 1rem 2.5rem;
+  border: 2px solid var(--medium-green);
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  background-color: var(--dark-green);
+  border-color: var(--light-green);
+}
+
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 2.5rem;
+  }
+
+  .hero p {
+    font-size: 1.1rem;
+  }
+}

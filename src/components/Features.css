@@ -1,0 +1,49 @@
+.features {
+  padding: 5rem 5%;
+  background-color: var(--dark);
+}
+
+.features h2 {
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 3rem;
+  color: var(--light-green);
+}
+
+.features-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.feature-card {
+  background: linear-gradient(135deg, var(--dark-green) 0%, rgba(30, 81, 40, 0.5) 100%);
+  padding: 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--medium-green);
+  transition: all 0.3s;
+}
+
+.feature-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 8px 24px rgba(78, 159, 61, 0.3);
+  border-color: var(--light-green);
+}
+
+.feature-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.feature-card h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: var(--medium-green);
+}
+
+.feature-card p {
+  color: var(--light-green);
+  opacity: 0.9;
+}

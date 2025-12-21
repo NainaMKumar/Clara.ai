@@ -1,0 +1,23 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --dark: #191A19;
+  --dark-green: #1E5128;
+  --medium-green: #4E9F3D;
+  --light-green: #D8E9A8;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: var(--dark);
+  color: var(--light-green);
+  line-height: 1.6;
+}
+
+button {
+  font-family: inherit;
+}
