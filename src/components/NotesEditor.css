@@ -7,7 +7,7 @@
 }
 
 .editor-header {
-  padding: 2rem 3rem 1rem;
+  padding: 2rem 3rem;
   border-bottom: 1px solid #e0e0e0;
 }
 
@@ -108,12 +108,24 @@
   font-size: 1rem;
   line-height: 1.6;
   color: var(--text-dark);
-  resize: none;
   font-family: inherit;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
-.note-textarea::placeholder {
+.note-textarea:empty:before {
+  content: attr(data-placeholder);
   color: #ccc;
+}
+
+.transcript-text {
+  color: #999;
+}
+
+.suggestion-text {
+  color: #999;
+  pointer-events: none;
+  user-select: none;
 }
 
 @media (max-width: 768px) {

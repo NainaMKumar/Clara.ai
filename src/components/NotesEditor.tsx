@@ -1,12 +1,75 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import './NotesEditor.css'
 
 const NotesEditor: React.FC = () => {
   const [title, setTitle] = useState('Untitled Note')
-  const [content, setContent] = useState('')
   const [isRecording, setIsRecording] = useState(false)
+  const [transcript, setTranscript] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [deepgramSocket, setDeepgramSocket] = useState<WebSocket | null>(null)
+  const contentEditableRef = React.useRef<HTMLDivElement>(null)
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = React.useRef<MediaStream | null>(null)
+
+  // Manage suggestion display in the DOM
+  useEffect(() => {
+    if (contentEditableRef.current) {
+      // Remove any existing suggestion spans
+      const existingSuggestions = contentEditableRef.current.querySelectorAll('.suggestion-text')
+      existingSuggestions.forEach(span => span.remove())
+
+      if (suggestion) {
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          const span = document.createElement('span')
+          span.className = 'suggestion-text'
+          span.textContent = suggestion
+          span.contentEditable = 'false'
+
+          // Insert the suggestion at cursor position
+          const suggestionRange = range.cloneRange()
+          suggestionRange.collapse(true)
+          suggestionRange.insertNode(span)
+
+          // Keep cursor position before the suggestion
+          const newRange = document.createRange()
+          newRange.setStartBefore(span)
+          newRange.setEndBefore(span)
+          selection.removeAllRanges()
+          selection.addRange(newRange)
+        }
+      }
+    }
+  }, [suggestion])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Tab' && suggestion) {
+      e.preventDefault()
+      // Accept the suggestion by replacing the suggestion span with text
+      if (contentEditableRef.current) {
+        const suggestionSpan = contentEditableRef.current.querySelector('.suggestion-text')
+        if (suggestionSpan) {
+          const textNode = document.createTextNode(suggestion)
+          suggestionSpan.replaceWith(textNode)
+
+          // Move cursor after the inserted text
+          const selection = window.getSelection()
+          if (selection) {
+            const range = document.createRange()
+            range.setStartAfter(textNode)
+            range.setEndAfter(textNode)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+        }
+      }
+      setSuggestion('')
+    } else if ((e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') && suggestion) {
+      // User is typing or deleting - clear the suggestion
+      setSuggestion('')
+    }
+  }
 
   const handleRecordingToggle = () => {
     if (isRecording) {
@@ -23,9 +86,13 @@ const NotesEditor: React.FC = () => {
     const socket = new WebSocket('wss://api.deepgram.com/v1/listen', ['token', DEEPGRAM_API_KEY])
 
     socket.onopen = async () => {
+      setIsRecording(true)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-      
+
+      mediaStreamRef.current = stream
+      mediaRecorderRef.current = mediaRecorder
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
           socket.send(event.data)
@@ -36,20 +103,35 @@ const NotesEditor: React.FC = () => {
       // receive transcription results
       socket.onmessage = (message) => {
         const data = JSON.parse(message.data)
-        const transcript = data.channel?.alternatives?.[0]?.transcript
-        if (transcript) {
-          setSuggestion(transcript)
+        const transcriptText = data.channel?.alternatives?.[0]?.transcript
+        if (transcriptText) {
+          setTranscript(prev => prev + ' ' + transcriptText)
+          setSuggestion(prev => prev + ' ' + transcriptText)
         }
       }
       setDeepgramSocket(socket)
     }
-    
+
   }
 
   const stopRecording = () => {
     setIsRecording(false)
-    // TODO: Integrate with audio recording API to stop and process
+    if (mediaRecorderRef) {
+      mediaRecorderRef.current?.stop()
+      mediaRecorderRef.current = null
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop())
+      mediaStreamRef.current = null
+    }
+
+    // close the Deepgram websocket
+    if (deepgramSocket) {
+      deepgramSocket.close()
+      setDeepgramSocket(null)
+    }
     console.log('Recording stopped...')
+    
   }
 
   return (
@@ -74,11 +156,12 @@ const NotesEditor: React.FC = () => {
         </button>
       </div>
       <div className="editor-content">
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
+        <div
+          ref={contentEditableRef}
+          contentEditable="true"
           className="note-textarea"
-          placeholder="Start typing your notes here..."
+          data-placeholder="Start typing your notes here..."
+          onKeyDown={handleKeyDown}
         />
       </div>
     </div>
