@@ -1,4 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
+import SimpleMDE from 'react-simplemde-editor'
+import EasyMDE from 'easymde'
+import 'easymde/dist/easymde.min.css'
 import { Note } from '../types'
 import './NotesEditor.css'
 
@@ -18,6 +21,43 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate, onDelete }) =
   useEffect(() => {
     contentRef.current = note.content
   }, [note.content])
+
+  const mdeOptions = useMemo(() => {
+    return {
+      spellChecker: false,
+      placeholder: 'Start typing your notes here...',
+      status: false,
+      autosave: {
+        enabled: false,
+        uniqueId: note.id,
+        delay: 1000,
+      },
+      toolbar: [
+        'bold', 'italic', 
+        {
+          name: 'heading-1',
+          action: EasyMDE.toggleHeading1,
+          className: 'fa fa-header fa-header-x fa-header-1',
+          title: 'Heading 1',
+        },
+        {
+          name: 'heading-2',
+          action: EasyMDE.toggleHeading2,
+          className: 'fa fa-header fa-header-x fa-header-2',
+          title: 'Heading 2',
+        },
+        {
+          name: 'heading-3',
+          action: EasyMDE.toggleHeading3,
+          className: 'fa fa-header fa-header-x fa-header-3',
+          title: 'Heading 3',
+        },
+        '|', 
+        'quote', 'unordered-list', 'ordered-list', '|',
+        'link', 'image'
+      ]
+    }
+  }, [note.id])
 
   const handleRecordingToggle = () => {
     if (isRecording) {
@@ -80,7 +120,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate, onDelete }) =
           placeholder="Note Title"
         />
       </div>
-      <div className="editor-toolbar">
+      <div className="notes-actions">
         <button
           className={`record-button ${isRecording ? 'recording' : ''}`}
           onClick={handleRecordingToggle}
@@ -106,18 +146,18 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate, onDelete }) =
             strokeLinejoin="round"
           >
             <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
             <line x1="10" y1="11" x2="10" y2="17"></line>
             <line x1="14" y1="11" x2="14" y2="17"></line>
           </svg>
         </button>
       </div>
       <div className="editor-content">
-        <textarea
+        <SimpleMDE
           value={note.content}
-          onChange={(e) => onUpdate({ content: e.target.value })}
-          className="note-textarea"
-          placeholder="Start typing your notes here..."
+          onChange={(value) => onUpdate({ content: value })}
+          options={mdeOptions}
+          className="note-mde"
         />
       </div>
     </div>
