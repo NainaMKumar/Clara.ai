@@ -1,22 +1,19 @@
 import React from 'react'
-import Navbar from './components/Navbar'
-import Hero from './components/Hero'
-import Features from './components/Features'
-import HowItWorks from './components/HowItWorks'
-import CTA from './components/CTA'
-import Footer from './components/Footer'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import HomePage from './pages/HomePage'
+import NotesPage from './pages/NotesPage'
 import './App.css'
 
 const App: React.FC = () => {
   return (
-    <div className="app">
-      <Navbar />
-      <Hero />
-      <Features />
-      <HowItWorks />
-      <CTA />
-      <Footer />
-    </div>
+    <Router>
+      <div className="app">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/notes" element={<NotesPage />} />
+        </Routes>
+      </div>
+    </Router>
   )
 }
 

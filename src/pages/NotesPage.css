@@ -1,0 +1,20 @@
+.notes-page {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.notes-page .notes-editor {
+  margin-left: 280px;
+}
+
+@media (max-width: 768px) {
+  .notes-page {
+    flex-direction: column;
+  }
+
+  .notes-page .notes-editor {
+    margin-left: 0;
+  }
+}
