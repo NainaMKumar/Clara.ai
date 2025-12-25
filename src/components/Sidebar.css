@@ -1,7 +1,7 @@
 .sidebar {
   width: 280px;
-  background-color: #f8f9fa;
-  border-right: 1px solid #e0e0e0;
+  background-color: #fafafa;
+  border-right: 1px solid #f0f0f0;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -12,7 +12,7 @@
 
 .sidebar-header {
   padding: 1.5rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .sidebar-header h2 {
@@ -58,6 +58,11 @@
 .note-item:hover {
   border-color: var(--teal);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.note-item.active {
+  background-color: #e6fffa; /* Light teal background */
+  border-color: var(--teal);
 }
 
 .note-item h3 {

@@ -1,19 +1,28 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Note } from '../types'
 import './NotesEditor.css'
 
-const NotesEditor: React.FC = () => {
-  const [title, setTitle] = useState('Untitled Note')
-  const [content, setContent] = useState('')
+interface NotesEditorProps {
+  note: Note
+  onUpdate: (fields: Partial<Note>) => void
+  onDelete: () => void
+}
+
+const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate, onDelete }) => {
   const [isRecording, setIsRecording] = useState(false)
-  const [suggestion, setSuggestion] = useState('')
   const [deepgramSocket, setDeepgramSocket] = useState<WebSocket | null>(null)
+  
+  // Use a ref to keep track of content for the socket callback without stale closures
+  const contentRef = useRef(note.content)
+
+  useEffect(() => {
+    contentRef.current = note.content
+  }, [note.content])
 
   const handleRecordingToggle = () => {
     if (isRecording) {
-      // Stop recording
       stopRecording()
     } else {
-      // Start recording
       startRecording()
     }
   }
@@ -23,33 +32,41 @@ const NotesEditor: React.FC = () => {
     const socket = new WebSocket('wss://api.deepgram.com/v1/listen', ['token', DEEPGRAM_API_KEY])
 
     socket.onopen = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-      
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(event.data)
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+        
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+            socket.send(event.data)
+          }
         }
-      }
-      mediaRecorder.start(250) // Send data in 250ms chunks
+        mediaRecorder.start(250)
 
-      // receive transcription results
-      socket.onmessage = (message) => {
-        const data = JSON.parse(message.data)
-        const transcript = data.channel?.alternatives?.[0]?.transcript
-        if (transcript) {
-          setSuggestion(transcript)
+        socket.onmessage = (message) => {
+          const data = JSON.parse(message.data)
+          const transcript = data.channel?.alternatives?.[0]?.transcript
+          if (transcript) {
+            // Append transcript to current content
+            const newContent = (contentRef.current ? contentRef.current + ' ' : '') + transcript
+            onUpdate({ content: newContent })
+          }
         }
+        setDeepgramSocket(socket)
+        setIsRecording(true)
+      } catch (error) {
+        console.error('Error accessing microphone:', error)
+        setIsRecording(false)
       }
-      setDeepgramSocket(socket)
     }
-    
   }
 
   const stopRecording = () => {
     setIsRecording(false)
-    // TODO: Integrate with audio recording API to stop and process
-    console.log('Recording stopped...')
+    if (deepgramSocket) {
+      deepgramSocket.close()
+      setDeepgramSocket(null)
+    }
   }
 
   return (
@@ -57,8 +74,8 @@ const NotesEditor: React.FC = () => {
       <div className="editor-header">
         <input
           type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          value={note.title}
+          onChange={(e) => onUpdate({ title: e.target.value })}
           className="note-title-input"
           placeholder="Note Title"
         />
@@ -72,11 +89,33 @@ const NotesEditor: React.FC = () => {
           <span className="record-icon"></span>
           {isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
+        <button 
+          className="delete-button" 
+          onClick={onDelete}
+          title="Delete Note"
+        >
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            width="20" 
+            height="20" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+          >
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </div>
       <div className="editor-content">
         <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
+          value={note.content}
+          onChange={(e) => onUpdate({ content: e.target.value })}
           className="note-textarea"
           placeholder="Start typing your notes here..."
         />
