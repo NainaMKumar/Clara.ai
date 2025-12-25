@@ -1,7 +1,7 @@
 .sidebar {
   width: 280px;
-  background-color: #f8f9fa;
-  border-right: 1px solid #e0e0e0;
+  background-color: #fafafa;
+  border-right: 1px solid #f0f0f0;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -12,7 +12,7 @@
 
 .sidebar-header {
   padding: 1.5rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .sidebar-header h2 {
@@ -53,6 +53,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
+  position: relative; /* For absolute positioning of delete button */
 }
 
 .note-item:hover {
@@ -60,11 +61,17 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
+.note-item.active {
+  background-color: #e6fffa; /* Light teal background */
+  border-color: var(--teal);
+}
+
 .note-item h3 {
   margin: 0 0 0.5rem 0;
   font-size: 1rem;
   color: var(--text-dark);
   font-weight: 600;
+  padding-right: 20px; /* Make space for delete button if needed, though it's at bottom */
 }
 
 .note-item p {
@@ -79,6 +86,27 @@
 .note-date {
   font-size: 0.75rem;
   color: #999;
+}
+
+.note-delete-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background-color: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.note-delete-btn:hover {
+  background-color: #fee2e2;
+  color: #ef4444;
 }
 
 @media (max-width: 768px) {
