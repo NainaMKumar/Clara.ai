@@ -53,6 +53,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   border: 1px solid transparent;
+  position: relative; /* For absolute positioning of delete button */
 }
 
 .note-item:hover {
@@ -70,6 +71,7 @@
   font-size: 1rem;
   color: var(--text-dark);
   font-weight: 600;
+  padding-right: 20px; /* Make space for delete button if needed, though it's at bottom */
 }
 
 .note-item p {
@@ -84,6 +86,27 @@
 .note-date {
   font-size: 0.75rem;
   color: #999;
+}
+
+.note-delete-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background-color: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.note-delete-btn:hover {
+  background-color: #fee2e2;
+  color: #ef4444;
 }
 
 @media (max-width: 768px) {

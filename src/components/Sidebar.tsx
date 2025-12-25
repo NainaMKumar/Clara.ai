@@ -6,10 +6,11 @@ interface SidebarProps {
   notes: Note[]
   onSelectNote: (id: string) => void
   onNewNote: () => void
+  onDeleteNote: (id: string) => void
   selectedNoteId: string | null
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ notes, onSelectNote, onNewNote, selectedNoteId }) => {
+const Sidebar: React.FC<SidebarProps> = ({ notes, onSelectNote, onNewNote, onDeleteNote, selectedNoteId }) => {
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -28,6 +29,31 @@ const Sidebar: React.FC<SidebarProps> = ({ notes, onSelectNote, onNewNote, selec
             <h3>{note.title || 'Untitled Note'}</h3>
             <p>{note.content.substring(0, 50) || 'No additional text'}{note.content.length > 50 ? '...' : ''}</p>
             <span className="note-date">{note.date}</span>
+            <button 
+              className="note-delete-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDeleteNote(note.id)
+              }}
+              title="Delete Note"
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="16" 
+                height="16" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+              </svg>
+            </button>
           </div>
         ))}
       </div>

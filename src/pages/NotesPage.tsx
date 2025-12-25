@@ -53,13 +53,13 @@ const NotesPage: React.FC = () => {
         notes={notes} 
         onSelectNote={handleNoteSelect} 
         onNewNote={handleNewNote}
+        onDeleteNote={handleDeleteNote}
         selectedNoteId={selectedNoteId}
       />
       {selectedNote ? (
         <NotesEditor 
           note={selectedNote} 
           onUpdate={(fields) => handleNoteUpdate(selectedNote.id, fields)}
-          onDelete={() => handleDeleteNote(selectedNote.id)}
         />
       ) : (
         <div className="no-note-selected">
