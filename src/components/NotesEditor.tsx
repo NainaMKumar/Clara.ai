@@ -10,6 +10,9 @@ const NotesEditor: React.FC = () => {
   const contentEditableRef = React.useRef<HTMLDivElement>(null)
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
   const mediaStreamRef = React.useRef<MediaStream | null>(null)
+  const [mode, setMode] = useState<'autocomplete' | 'suggestion'>('suggestion')
+  const typingTimerRef = React.useRef<number | null>(null)
+  const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false)
 
   // Manage suggestion display in the DOM
   useEffect(() => {
@@ -81,6 +84,64 @@ const NotesEditor: React.FC = () => {
     }
   }
 
+  const fetchAISuggestion = async(context: String) =>  {
+    const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a helpful writing assistant. Continue the user\'s text naturally based on context.'
+              },
+              {
+                role: 'user',
+                content: `Continue this text: ${context}`
+              }
+            ],
+            max_tokens: 50,
+            temperature: 0.7
+          })
+        })
+
+        const data = await response.json()
+        return data.choices[0].message.content
+  }
+
+  const handleInput = () => {
+    if (mode != 'autocomplete') return 
+
+    // clear existing timer
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current)
+    }
+    // clear existing suggestion while typing
+    setSuggestion('')
+    typingTimerRef.current = setTimeout(async () => {
+      // current user text
+      const currentText = contentEditableRef.current?.textContent || ''
+      // transcript context
+      const context = currentText + (transcript ? '' + transcript : '')
+
+      if (context.trim().length > 10) {
+        setIsLoadingSuggestion(true)
+        try{
+          const aiSuggestion = await fetchAISuggestion(context)
+          setSuggestion(aiSuggestion)
+        } catch (error) {
+          console.error('Failed to fetch AI suggestion',error)
+        } finally {
+          setIsLoadingSuggestion(false)
+        }
+      }
+    }, 1500) // 1.5 second pause
+  }
+
   const startRecording = async () => {
     const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || ''
     const socket = new WebSocket('wss://api.deepgram.com/v1/listen', ['token', DEEPGRAM_API_KEY])
@@ -106,7 +167,10 @@ const NotesEditor: React.FC = () => {
         const transcriptText = data.channel?.alternatives?.[0]?.transcript
         if (transcriptText) {
           setTranscript(prev => prev + ' ' + transcriptText)
-          setSuggestion(prev => prev + ' ' + transcriptText)
+          if (mode == 'autocomplete') {
+            setSuggestion(prev => prev + ' ' + transcriptText)
+          }
+          
         }
       }
       setDeepgramSocket(socket)
@@ -146,6 +210,21 @@ const NotesEditor: React.FC = () => {
         />
       </div>
       <div className="editor-toolbar">
+        <button 
+          className={`mode-button ${mode === 'autocomplete' ? 'active' : ''}`}
+          onClick={() => setMode('autocomplete')}
+          title="Autocomplete mode"
+        >
+          Autocomplete
+        </button>
+
+        <button 
+          className={`mode-button ${mode === 'suggestion' ? 'active': ''}`}
+          onClick={() => setMode('suggestion')}
+          title="suggestion mode"
+        >
+          Suggestion
+        </button>
         <button
           className={`record-button ${isRecording ? 'recording' : ''}`}
           onClick={handleRecordingToggle}
@@ -162,6 +241,7 @@ const NotesEditor: React.FC = () => {
           className="note-textarea"
           data-placeholder="Start typing your notes here..."
           onKeyDown={handleKeyDown}
+          onInput={handleInput}
         />
       </div>
     </div>
