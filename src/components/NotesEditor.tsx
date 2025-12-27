@@ -84,7 +84,7 @@ const NotesEditor: React.FC = () => {
     }
   }
 
-  const fetchAISuggestion = async(context: String) =>  {
+  const fetchAISuggestion = async(typedText: string, spokenTranscript: string) =>  {
     const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -97,15 +97,15 @@ const NotesEditor: React.FC = () => {
             messages: [
               {
                 role: 'system',
-                content: 'You are a helpful writing assistant. Continue the user\'s text naturally based on context.'
+                content: 'You help complete text. The user spoke a sentence and typed part of it. Output ONLY the remaining words they spoke but haven\'t typed yet. Do not repeat what they already typed. Do not rephrase. Extract only the untyped portion.'
               },
               {
                 role: 'user',
-                content: `Continue this text: ${context}`
+                content: `What was recorded: "${spokenTranscript}"\n What the user typed: "${typedText}"\n\nOnly output the remaining words:`
               }
             ],
-            max_tokens: 50,
-            temperature: 0.7
+            max_tokens: 100,
+            temperature: 0.2
           })
         })
 
@@ -114,7 +114,7 @@ const NotesEditor: React.FC = () => {
   }
 
   const handleInput = () => {
-    if (mode != 'autocomplete') return 
+    if (mode != 'suggestion') return 
 
     // clear existing timer
     if (typingTimerRef.current) {
@@ -130,9 +130,10 @@ const NotesEditor: React.FC = () => {
 
       if (context.trim().length > 10) {
         setIsLoadingSuggestion(true)
-        try{
-          const aiSuggestion = await fetchAISuggestion(context)
+        try {
+          const aiSuggestion = await fetchAISuggestion(currentText, context)
           setSuggestion(aiSuggestion)
+          setTranscript('')
         } catch (error) {
           console.error('Failed to fetch AI suggestion',error)
         } finally {
@@ -194,6 +195,15 @@ const NotesEditor: React.FC = () => {
       deepgramSocket.close()
       setDeepgramSocket(null)
     }
+
+    setTranscript('')
+    setSuggestion('')
+
+    // clear active timer
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current)
+    }
+
     console.log('Recording stopped...')
     
   }
