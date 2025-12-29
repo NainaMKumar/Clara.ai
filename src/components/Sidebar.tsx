@@ -2,6 +2,13 @@ import React from 'react'
 import { Note } from '../types'
 import './Sidebar.css'
 
+function stripHtml(html: string) {
+  // Quick client-side strip for previews (keeps this dependency-free).
+  const div = document.createElement('div')
+  div.innerHTML = html
+  return (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim()
+}
+
 interface SidebarProps {
   notes: Note[]
   onSelectNote: (id: string) => void
@@ -27,7 +34,13 @@ const Sidebar: React.FC<SidebarProps> = ({ notes, onSelectNote, onNewNote, onDel
             onClick={() => onSelectNote(note.id)}
           >
             <h3>{note.title || 'Untitled Note'}</h3>
-            <p>{note.content.substring(0, 50) || 'No additional text'}{note.content.length > 50 ? '...' : ''}</p>
+            <p>
+              {(() => {
+                const preview = stripHtml(note.content || '')
+                const truncated = preview.substring(0, 50)
+                return `${truncated || 'No additional text'}${preview.length > 50 ? '...' : ''}`
+              })()}
+            </p>
             <span className="note-date">{note.date}</span>
             <button 
               className="note-delete-btn"

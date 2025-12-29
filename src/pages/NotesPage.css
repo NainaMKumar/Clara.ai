@@ -5,8 +5,289 @@
   overflow: hidden;
 }
 
-.notes-page .notes-editor {
+.notes-main {
   margin-left: 280px;
+  flex: 1;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notes-content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.notes-main .notes-editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.rag-sidebar {
+  position: relative;
+  height: 100%;
+  border-left: 1px solid #f0f0f0;
+  background: #ffffff;
+  transition: width 180ms ease;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.rag-sidebar.open {
+  width: 360px;
+}
+
+.rag-sidebar.closed {
+  width: 44px;
+}
+
+.rag-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 44px;
+  height: 100%;
+  border: none;
+  background: #f9fafb;
+  border-right: 1px solid #f0f0f0;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.rag-toggle:hover {
+  background: #ffffff;
+  color: #111827;
+}
+
+.rag-toggle:active {
+  background: #f3f4f6;
+}
+
+.rag-toggle-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rag-sidebar-body {
+  height: 100%;
+  margin-left: 44px;
+  overflow: auto;
+}
+
+.rag-sidebar-body.hidden {
+  display: none;
+}
+
+.rag-panel {
+  background: #ffffff;
+  padding: 1rem 1.1rem;
+}
+
+.rag-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rag-title {
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.rag-status {
+  font-size: 0.85rem;
+  color: #6b7280;
+  flex: 1;
+  text-align: right;
+}
+
+.rag-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.rag-input-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.rag-input {
+  flex: 1;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  outline: none;
+  font-size: 0.95rem;
+  background: #f3f4f6; /* light gray */
+  color: #111827; /* dark dark gray */
+}
+
+.rag-input::placeholder {
+  color: #4b5563;
+}
+
+.rag-input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+}
+
+.rag-button {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.rag-button.primary {
+  background: var(--teal);
+  color: white;
+}
+
+.rag-button.primary:hover:not(:disabled) {
+  background: var(--teal-dark);
+}
+
+.rag-button.secondary {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+
+.rag-button.secondary:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.rag-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rag-error {
+  margin-top: 0.75rem;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.rag-output {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.rag-answer {
+  white-space: pre-wrap;
+  color: #111827;
+  line-height: 1.5;
+}
+
+.rag-citations {
+  margin-top: 0.75rem;
+}
+
+.rag-citations-title {
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+.rag-citations ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.rag-citation-button {
+  display: inline;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rag-citation-button:hover .rag-citation-note {
+  text-decoration: underline;
+}
+
+.rag-citation-note {
+  font-weight: 600;
+}
+
+.rag-citation-quote {
+  color: #4b5563;
+}
+
+.citation-jump {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #f0f0f0;
+  background: #f9fafb;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.citation-jump-label {
+  font-weight: 700;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.citation-jump-quote {
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.citation-jump-clear {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 0.45rem 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.citation-jump-clear:hover {
+  border-color: #cbd5e1;
 }
 
 @media (max-width: 768px) {
@@ -14,7 +295,29 @@
     flex-direction: column;
   }
 
-  .notes-page .notes-editor {
+  .notes-main {
     margin-left: 0;
+    height: auto;
+  }
+
+  .rag-sidebar.open {
+    width: 100%;
+  }
+
+  .rag-sidebar.closed {
+    width: 100%;
+    height: 44px;
+  }
+
+  .rag-toggle {
+    width: 100%;
+    height: 44px;
+    border-right: none;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .rag-sidebar-body {
+    margin-left: 0;
+    margin-top: 44px;
   }
 }

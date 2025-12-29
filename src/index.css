@@ -12,11 +12,17 @@
   --text-light: #6B7280;
 }
 
+html {
+  /* Make rem-based typography smaller across the entire app */
+  font-size: 13px;
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   background-color: var(--white);
   color: var(--text-dark);
-  line-height: 1.6;
+  line-height: 1.55;
+  font-size: 1rem;
 }
 
 button {
