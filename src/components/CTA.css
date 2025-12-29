@@ -16,3 +16,6 @@
   color: var(--light-green);
   opacity: 0.9;
 }
+.btn-primary{
+  text-decoration: none;
+}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import DemoVisual from './DemoVisual'
 import './Hero.css'
 
@@ -52,7 +53,7 @@ const Hero: React.FC = () => {
           Just intelligent assistance as you think, type, and learn.
         </p>
         <div className="hero-buttons">
-          <button className="btn-primary">Start Free Trial</button>
+          <Link to="/notes" className="btn-primary">Start Free Trial</Link>
           <button className="btn-secondary">Watch Demo</button>
         </div>
       </div>
