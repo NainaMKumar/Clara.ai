@@ -1,78 +1,823 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { EditorContent, useEditor } from '@tiptap/react'
+import { Extension } from '@tiptap/core'
+import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
+import { Plugin } from 'prosemirror-state'
+import { Decoration, DecorationSet } from 'prosemirror-view'
 import './NotesEditor.css'
 
-const NotesEditor: React.FC = () => {
-  const [title, setTitle] = useState('Untitled Note')
+import type { Note } from '../types'
+import type { NoteFeedbackFixContext, NoteFeedbackFixResponse, NoteFeedbackItem, NoteFeedbackResponse } from '../types'
+
+type NotesEditorProps = {
+  note: Note
+  onUpdate: (fields: Partial<Note>) => void
+}
+
+type TrackedIssue = NoteFeedbackItem & {
+  localId: string
+  resolved: boolean
+}
+
+function makeIssueId(it: NoteFeedbackItem) {
+  // Stable enough for UI keys; avoids bringing in hashing deps.
+  return `${it.kind}:${it.quote}:${it.issue}`.slice(0, 200)
+}
+
+function normalizeForSearch(s: string) {
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+function toPlainTextContent(text: string): Array<{ type: string; text?: string }> {
+  // TipTap/ProseMirror-friendly representation that preserves newlines as hardBreaks.
+  const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n')
+  const out: Array<{ type: string; text?: string }> = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line) out.push({ type: 'text', text: line })
+    if (i < lines.length - 1) out.push({ type: 'hardBreak' })
+  }
+  return out
+}
+
+function toParagraphNodeFromText(text: string) {
+  return {
+    type: 'paragraph',
+    content: toPlainTextContent(text),
+  }
+}
+
+function findReasonableInsertPosAfterBlock(doc: any, from: number): number {
+  // Insert AFTER the surrounding block (paragraph/listItem/heading/etc), not at the exact highlight position.
+  // Fallback: end of document.
+  try {
+    const $pos = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+    // Find nearest block at/above this position.
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node && node.isBlock) {
+        // Position right after this block node.
+        const after = $pos.after(d)
+        if (Number.isFinite(after)) return after
+      }
+    }
+  } catch {
+    // ignore
+  }
+  // ProseMirror doc end position (inside the doc node).
+  return Math.max(0, (doc?.content?.size ?? 0))
+}
+
+function getStructuralContextAtPos(doc: any, from: number): NoteFeedbackFixContext {
+  try {
+    const $pos = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+    // If within a list item, capture list type.
+    for (let d = $pos.depth; d >= 1; d--) {
+      const node = $pos.node(d)
+      const name = node?.type?.name
+      if (name === 'listItem') {
+        const parentName = $pos.node(d - 1)?.type?.name
+        const listType = parentName === 'bulletList' || parentName === 'orderedList' ? parentName : undefined
+        const blockText = String(node.textContent ?? '').slice(0, 900)
+        return { containerType: 'listItem', listType, blockText }
+      }
+    }
+    // Otherwise nearest block.
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node?.isBlock) {
+        return { containerType: String(node.type?.name ?? 'block'), blockText: String(node.textContent ?? '').slice(0, 900) }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { containerType: 'unknown' }
+}
+
+function getListInsertTarget(doc: any, from: number): { pos: number; listType: 'bulletList' | 'orderedList' } | null {
+  try {
+    const $pos = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+    for (let d = $pos.depth; d >= 1; d--) {
+      const node = $pos.node(d)
+      if (node?.type?.name !== 'listItem') continue
+      const parentName = $pos.node(d - 1)?.type?.name
+      if (parentName !== 'bulletList' && parentName !== 'orderedList') continue
+      const posAfterListItem = $pos.after(d) // inside list
+      return { pos: posAfterListItem, listType: parentName }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function findQuoteRangeInDoc(doc: any, quote: string): { from: number; to: number } | null {
+  const q = normalizeForSearch(quote)
+  if (!q) return null
+
+  let combined = ''
+  const map: number[] = [] // character index -> doc position
+
+  doc.descendants((node: any, pos: number) => {
+    if (!node.isText) return true
+    const text = String(node.text ?? '')
+    for (let i = 0; i < text.length; i++) {
+      combined += text[i]
+      map.push(pos + i)
+    }
+    return true
+  })
+
+  const hay = normalizeForSearch(combined)
+  // We normalized whitespace; mapping is approximate but works well for short quotes.
+  const idx = hay.indexOf(q)
+  if (idx < 0) return null
+
+  // Convert normalized index back to raw index by scanning both strings together.
+  // This keeps decoration placement close even when multiple spaces/newlines exist.
+  let rawStart = 0
+  let normSeen = 0
+  const raw = combined
+  while (rawStart < raw.length && normSeen < idx) {
+    const ch = raw[rawStart]
+    const isWs = /\s/.test(ch)
+    if (isWs) {
+      // Count this whitespace only if it starts a collapsed whitespace run.
+      const prev = rawStart > 0 ? raw[rawStart - 1] : ''
+      if (!/\s/.test(prev)) normSeen += 1
+    } else {
+      normSeen += 1
+    }
+    rawStart += 1
+  }
+
+  let rawEnd = rawStart
+  let normNeed = q.length
+  let normCount = 0
+  while (rawEnd < raw.length && normCount < normNeed) {
+    const ch = raw[rawEnd]
+    const isWs = /\s/.test(ch)
+    if (isWs) {
+      const prev = rawEnd > 0 ? raw[rawEnd - 1] : ''
+      if (!/\s/.test(prev)) normCount += 1
+    } else {
+      normCount += 1
+    }
+    rawEnd += 1
+  }
+
+  const from = map[rawStart]
+  const to = map[Math.max(rawStart, rawEnd - 1)]
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+  return { from, to: to + 1 }
+}
+
+function createFeedbackHighlightExtension(issuesRef: React.MutableRefObject<TrackedIssue[]>) {
+  return Extension.create({
+    name: 'feedbackHighlight',
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          props: {
+            decorations(state) {
+              const issues = issuesRef.current.filter((x) => !x.resolved)
+              if (!issues.length) return null
+              const decos: Decoration[] = []
+              for (const it of issues) {
+                const range = findQuoteRangeInDoc(state.doc, it.quote)
+                if (!range) continue
+                decos.push(
+                  Decoration.inline(range.from, range.to, {
+                    class: `note-feedback-highlight note-feedback-highlight--${it.kind}`,
+                    'data-feedback-id': it.localId,
+                  })
+                )
+              }
+              return DecorationSet.create(state.doc, decos)
+            },
+          },
+        }),
+      ]
+    },
+  })
+}
+
+function IconLink() {
+  return (
+    <svg className="format-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M10.59 13.41a1.98 1.98 0 0 0 2.82 0l3.54-3.54a2 2 0 1 0-2.83-2.83l-1.06 1.06a1 1 0 1 1-1.41-1.41l1.06-1.06a4 4 0 1 1 5.66 5.66l-3.54 3.54a3.98 3.98 0 0 1-5.64 0a1 1 0 0 1 1.41-1.41ZM13.41 10.59a1.98 1.98 0 0 0-2.82 0L7.05 14.12a2 2 0 1 0 2.83 2.83l1.06-1.06a1 1 0 1 1 1.41 1.41l-1.06 1.06a4 4 0 1 1-5.66-5.66l3.54-3.54a3.98 3.98 0 0 1 5.64 0a1 1 0 0 1-1.41 1.41Z"
+      />
+    </svg>
+  )
+}
+
+function IconImage() {
+  return (
+    <svg className="format-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M21 5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5Zm-2 0v9.17l-2.59-2.58a2 2 0 0 0-2.82 0L7 18.17V5h12ZM5 19v-1.17l7-7l7 7V19H5Zm4.5-9A1.5 1.5 0 1 0 8 8.5A1.5 1.5 0 0 0 9.5 10Z"
+      />
+    </svg>
+  )
+}
+
+function IconCode() {
+  return (
+    <svg className="format-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M8.7 16.3a1 1 0 0 1 0 1.4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4l4-4a1 1 0 1 1 1.4 1.4L5.41 12l3.3 3.3Zm6.6 0L18.59 12l-3.3-3.3a1 1 0 1 1 1.4-1.4l4 4a1 1 0 0 1 0 1.4l-4 4a1 1 0 0 1-1.4 0a1 1 0 0 1 0-1.4ZM10.7 19.6a1 1 0 0 1-.9-1.4l4-14a1 1 0 0 1 1.92.55l-4 14a1 1 0 0 1-1.02.85Z"
+      />
+    </svg>
+  )
+}
+
+function IconCodeBlock() {
+  return (
+    <svg className="format-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7l-5-5Zm1 2.5L18.5 8H15a1 1 0 0 1-1-1V4.5ZM7 20V4h6v3a3 3 0 0 0 3 3h3v10H7Z"
+      />
+      <path
+        fill="currentColor"
+        d="M9.2 15.8a1 1 0 0 1 0-1.4L10.6 13l-1.4-1.4a1 1 0 1 1 1.4-1.4l2.1 2.1a1 1 0 0 1 0 1.4l-2.1 2.1a1 1 0 0 1-1.4 0Zm5.6 0-2.1-2.1a1 1 0 0 1 0-1.4l2.1-2.1a1 1 0 1 1 1.4 1.4L14.8 13l1.4 1.4a1 1 0 1 1-1.4 1.4Z"
+      />
+    </svg>
+  )
+}
+
+function IconQuote() {
+  return (
+    <svg className="format-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M7.17 6.17A4 4 0 0 0 5 9.76V19a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H7.02c.05-1.52.68-2.82 2.15-3.7a1 1 0 1 0-1-1.73Zm10 0A4 4 0 0 0 15 9.76V19a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-1.98c.05-1.52.68-2.82 2.15-3.7a1 1 0 1 0-1-1.73Z"
+      />
+    </svg>
+  )
+}
+
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function toEditorHtml(content: string) {
+  // If it already looks like HTML, keep it; otherwise treat it as plain text.
+  const trimmed = content.trim()
+  if (trimmed.startsWith('<')) return content
+  if (!trimmed) return '<p></p>'
+  return `<p>${escapeHtml(content).replace(/\n/g, '<br />')}</p>`
+}
+
+const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
+  const [title, setTitle] = useState(note.title)
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [suggestion, setSuggestion] = useState('')
   const [deepgramSocket, setDeepgramSocket] = useState<WebSocket | null>(null)
-  const contentEditableRef = React.useRef<HTMLDivElement>(null)
-  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
-  const mediaStreamRef = React.useRef<MediaStream | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
   const [mode, setMode] = useState<'autocomplete' | 'suggestion'>('suggestion')
-  const typingTimerRef = React.useRef<number | null>(null)
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false)
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
+  const [linkText, setLinkText] = useState('')
+  const [linkUrl, setLinkUrl] = useState('https://')
+  const [linkSelection, setLinkSelection] = useState<{ from: number; to: number; empty: boolean } | null>(null)
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [imageSelection, setImageSelection] = useState<{ from: number; to: number } | null>(null)
+  const [isLoadingFeedback, setIsLoadingFeedback] = useState(false)
+  const [feedbackError, setFeedbackError] = useState<string>('')
+  const [feedbackActionMsg, setFeedbackActionMsg] = useState<string>('')
+  const feedbackActionTimerRef = useRef<number | null>(null)
+  const [trackedIssues, setTrackedIssues] = useState<TrackedIssue[]>([])
+  const trackedIssuesRef = useRef<TrackedIssue[]>([])
+  const [hasRequestedFeedback, setHasRequestedFeedback] = useState(false)
+  const editorScrollRef = useRef<HTMLDivElement | null>(null)
+  const editorWrapRef = useRef<HTMLDivElement | null>(null)
+  const [annotationPins, setAnnotationPins] = useState<Array<{ localId: string; top: number; issue: TrackedIssue }>>([])
+  const annotationCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const annotationHeightsRef = useRef<Record<string, number>>({})
+  const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null)
+  const [activeFixId, setActiveFixId] = useState<string | null>(null)
+  const [fixDraftText, setFixDraftText] = useState<string>('')
+  const [fixDraftMode, setFixDraftMode] = useState<'insert' | 'replace'>('insert')
+  const [isGeneratingFix, setIsGeneratingFix] = useState(false)
 
-  // Manage suggestion display in the DOM
+  const insertImageAtSelection = async (opts: { src: string }) => {
+    if (!editor) return
+    const sel = imageSelection ?? { from: editor.state.selection.from, to: editor.state.selection.to }
+    editor.chain().focus().setTextSelection(sel).setImage({ src: opts.src }).run()
+  }
+
+  const readFileAsDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(file)
+    })
+
+  const editor = useEditor(
+    {
+      extensions: [
+        StarterKit.configure({
+          heading: { levels: [1, 2, 3] },
+        }),
+        Link.configure({
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+        }),
+        Image,
+        createFeedbackHighlightExtension(trackedIssuesRef),
+      ],
+      content: toEditorHtml(note.content),
+      editorProps: {
+        attributes: {
+          class: 'wysiwyg-editor',
+        },
+        handleKeyDown: (_view, event) => {
+          if (event.key === 'Tab' && suggestion.trim()) {
+            event.preventDefault()
+            // Accept the suggestion at the current cursor position.
+            editor?.chain().focus().insertContent(suggestion).run()
+            setSuggestion('')
+            return true
+          }
+          if (event.key === 'Escape' && isLinkModalOpen) {
+            event.preventDefault()
+            setIsLinkModalOpen(false)
+            return true
+          }
+          if (event.key === 'Escape' && isImageModalOpen) {
+            event.preventDefault()
+            setIsImageModalOpen(false)
+            return true
+          }
+          return false
+        },
+        handlePaste: (_view, event) => {
+          // Allow direct image pasting into the editor: insert image at cursor.
+          const clipboard = event.clipboardData
+          if (!clipboard) return false
+
+          const items = Array.from(clipboard.items)
+          const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'))
+          if (!imageItem) return false
+
+          const file = imageItem.getAsFile()
+          if (!file) return false
+
+          event.preventDefault()
+          ;(async () => {
+            try {
+              const src = await readFileAsDataUrl(file)
+              // Use current selection in editor (no modal needed for paste).
+              editor?.chain().focus().setImage({ src }).run()
+            } catch (err) {
+              console.error('Failed to paste image', err)
+            }
+          })()
+          return true
+        },
+      },
+      onUpdate: ({ editor }) => {
+        const html = editor.getHTML()
+        onUpdate({ content: html })
+        if (suggestion) setSuggestion('')
+      },
+    },
+    // Recreate editor when switching notes (simplest + avoids content desync).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [note.id]
+  )
+
+  // Force re-render on selection/transaction changes so toolbar toggles reflect stored marks
+  // even when the document doesn't change (e.g., bold toggled on an empty editor).
+  const [, forceToolbarUpdate] = useState(0)
   useEffect(() => {
-    if (contentEditableRef.current) {
-      // Remove any existing suggestion spans
-      const existingSuggestions = contentEditableRef.current.querySelectorAll('.suggestion-text')
-      existingSuggestions.forEach(span => span.remove())
+    if (!editor) return
+    const bump = () => forceToolbarUpdate((n) => (n + 1) % 1_000_000)
+    editor.on('transaction', bump)
+    editor.on('selectionUpdate', bump)
+    return () => {
+      editor.off('transaction', bump)
+      editor.off('selectionUpdate', bump)
+    }
+  }, [editor])
 
-      if (suggestion) {
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          const span = document.createElement('span')
-          span.className = 'suggestion-text'
-          span.textContent = suggestion
-          span.contentEditable = 'false'
+  // Keep local state in sync when switching notes.
+  useEffect(() => {
+    setTitle(note.title)
+    setTranscript('')
+      setSuggestion('')
+    setIsLoadingFeedback(false)
+    setFeedbackError('')
+    setFeedbackActionMsg('')
+    setTrackedIssues([])
+    trackedIssuesRef.current = []
+    setAnnotationPins([])
+    setHasRequestedFeedback(false)
+    setActiveAnnotationId(null)
+    setActiveFixId(null)
+    setFixDraftText('')
+    setFixDraftMode('insert')
+    setIsGeneratingFix(false)
+    if (feedbackActionTimerRef.current) {
+      window.clearTimeout(feedbackActionTimerRef.current)
+      feedbackActionTimerRef.current = null
+    }
+    // If you switch notes mid-recording, stop cleanly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id])
 
-          // Insert the suggestion at cursor position
-          const suggestionRange = range.cloneRange()
-          suggestionRange.collapse(true)
-          suggestionRange.insertNode(span)
+  useEffect(() => {
+    trackedIssuesRef.current = trackedIssues
+  }, [trackedIssues])
 
-          // Keep cursor position before the suggestion
-          const newRange = document.createRange()
-          newRange.setStartBefore(span)
-          newRange.setEndBefore(span)
-          selection.removeAllRanges()
-          selection.addRange(newRange)
-        }
+  const flashFeedbackAction = (msg: string) => {
+    setFeedbackActionMsg(msg)
+    if (feedbackActionTimerRef.current) window.clearTimeout(feedbackActionTimerRef.current)
+    feedbackActionTimerRef.current = window.setTimeout(() => {
+      setFeedbackActionMsg('')
+      feedbackActionTimerRef.current = null
+    }, 2200)
+  }
+
+  const highlightQuoteInEditorDom = (quote: string): boolean => {
+    if (!editor) return false
+    const q = quote.trim()
+    if (!q) return false
+
+    const root = editor.view.dom as HTMLElement | null
+    if (!root) return false
+
+    // Collect text nodes in DOM order.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.nodeValue ?? ''
+        return text.trim().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      },
+    })
+
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    if (!nodes.length) return false
+
+    // Build a combined string + index mapping into individual text nodes.
+    let combined = ''
+    const map: Array<{ node: Text; offset: number }> = []
+    for (const n of nodes) {
+      const text = n.nodeValue ?? ''
+      for (let i = 0; i < text.length; i++) {
+        combined += text[i]
+        map.push({ node: n, offset: i })
       }
     }
-  }, [suggestion])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Tab' && suggestion) {
-      e.preventDefault()
-      // Accept the suggestion by replacing the suggestion span with text
-      if (contentEditableRef.current) {
-        const suggestionSpan = contentEditableRef.current.querySelector('.suggestion-text')
-        if (suggestionSpan) {
-          const textNode = document.createTextNode(suggestion)
-          suggestionSpan.replaceWith(textNode)
+    const idx = combined.indexOf(q)
+    if (idx < 0) return false
+    const endIdx = idx + q.length - 1
+    const start = map[idx]
+    const end = map[endIdx]
+    if (!start || !end) return false
 
-          // Move cursor after the inserted text
-          const selection = window.getSelection()
-          if (selection) {
-            const range = document.createRange()
-            range.setStartAfter(textNode)
-            range.setEndAfter(textNode)
-            selection.removeAllRanges()
-            selection.addRange(range)
-          }
-        }
+    const range = document.createRange()
+    range.setStart(start.node, start.offset)
+    range.setEnd(end.node, end.offset + 1)
+
+    const sel = window.getSelection()
+    if (!sel) return false
+    sel.removeAllRanges()
+    sel.addRange(range)
+
+    // Scroll to selection.
+    const targetEl = (end.node.parentElement ?? start.node.parentElement) as HTMLElement | null
+    targetEl?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    return true
+  }
+
+  const locateQuoteInEditorDom = (quote: string): { from: number; to: number } | null => {
+    if (!editor) return null
+    const q = quote.trim()
+    if (!q) return null
+
+    const root = editor.view.dom as HTMLElement | null
+    if (!root) return null
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.nodeValue ?? ''
+        return text.trim().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      },
+    })
+
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    if (!nodes.length) return null
+
+    let combined = ''
+    const map: Array<{ node: Text; offset: number }> = []
+    for (const n of nodes) {
+      const text = n.nodeValue ?? ''
+      for (let i = 0; i < text.length; i++) {
+        combined += text[i]
+        map.push({ node: n, offset: i })
       }
-      setSuggestion('')
-    } else if ((e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') && suggestion) {
-      // User is typing or deleting - clear the suggestion
-      setSuggestion('')
+    }
+
+    const idx = combined.indexOf(q)
+    if (idx < 0) return null
+    const endIdx = idx + q.length - 1
+    const start = map[idx]
+    const end = map[endIdx]
+    if (!start || !end) return null
+
+    // Map DOM positions to ProseMirror document positions.
+    const from = editor.view.posAtDOM(start.node, start.offset)
+    const to = editor.view.posAtDOM(end.node, end.offset + 1)
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+    return { from: Math.max(0, from), to: Math.max(0, to) }
+  }
+
+  const commitFeedbackFix = (it: NoteFeedbackItem, suggestionOverride?: string, modeOverride?: 'insert' | 'replace') => {
+    if (!editor) return
+    // Prefer doc-based lookup (more robust vs whitespace/DOM differences),
+    // fall back to DOM-based lookup if needed.
+    const loc = findQuoteRangeInDoc(editor.state.doc, it.quote) ?? locateQuoteInEditorDom(it.quote)
+    if (!loc) {
+      setFeedbackError('Could not find that quoted text in the editor (it may have changed).')
+      return
+    }
+
+    setFeedbackError('')
+
+    const suggestion = (suggestionOverride ?? it.suggestion).trim()
+    if (!suggestion) return
+
+    const mode: 'insert' | 'replace' =
+      modeOverride ?? (it.kind === 'inaccurate' ? 'replace' : 'insert')
+
+    if (mode === 'replace') {
+      // Replace the quoted claim with the suggested correction.
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from: loc.from, to: loc.to }, toPlainTextContent(suggestion))
+        .run()
+      flashFeedbackAction('Applied: replaced text (undo with Cmd+Z)')
+      return
+    }
+
+    // Insert the suggestion where it makes sense: after the surrounding block (usually the paragraph),
+    // as a new paragraph, rather than inline at the highlight location.
+    const listTarget = getListInsertTarget(editor.state.doc, loc.from)
+    if (listTarget) {
+      // Preserve list structure: add a new list item in the same list.
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(listTarget.pos, {
+          type: 'listItem',
+          content: [toParagraphNodeFromText(suggestion)],
+        })
+        .run()
+    } else {
+      const insertPos = findReasonableInsertPosAfterBlock(editor.state.doc, loc.from)
+      editor.chain().focus().insertContentAt(insertPos, toParagraphNodeFromText(suggestion)).run()
+    }
+    flashFeedbackAction('Applied: inserted fix (undo with Cmd+Z)')
+  }
+
+  const resolveTrackedIssue = (localId: string) => {
+    setTrackedIssues((prev) => prev.map((x) => (x.localId === localId ? { ...x, resolved: true } : x)))
+    // Keep ref in sync immediately for decoration + pin calculations.
+    trackedIssuesRef.current = trackedIssuesRef.current.map((x) => (x.localId === localId ? { ...x, resolved: true } : x))
+    window.requestAnimationFrame(() => computeAnnotationPins())
+  }
+
+  const openFixReview = (it: TrackedIssue) => {
+    setActiveFixId(it.localId)
+    setFixDraftMode(it.kind === 'inaccurate' ? 'replace' : 'insert')
+    setFixDraftText('')
+    setIsGeneratingFix(true)
+    flashFeedbackAction('Generating fix…')
+
+    ;(async () => {
+      try {
+        const contentText = (editor?.getText() ?? '')
+          .replace(/\u00a0/g, ' ')
+          .trim()
+          .slice(0, 20_000)
+        if (!contentText) throw new Error('Note is empty')
+
+        const loc = findQuoteRangeInDoc(editor?.state.doc, it.quote) ?? locateQuoteInEditorDom(it.quote)
+        const context = loc ? getStructuralContextAtPos(editor?.state.doc, loc.from) : { containerType: 'unknown' }
+
+        const resp = await fetch('/api/note_feedback_fix', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            noteId: note.id,
+            title,
+            contentText,
+            item: it,
+            preferredMode: it.kind === 'inaccurate' ? 'replace' : 'insert',
+            context,
+          }),
+        })
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '')
+          throw new Error(`Fix generation failed: ${resp.status} ${resp.statusText} ${body}`)
+        }
+        const data = (await resp.json()) as NoteFeedbackFixResponse
+        const fixText = String(data.fixText ?? '').trim()
+        const mode = data.mode === 'replace' ? 'replace' : 'insert'
+
+        // Only update if this issue is still the active one.
+        setActiveFixId((current) => {
+          if (current !== it.localId) return current
+          setFixDraftText(fixText || it.suggestion || '')
+          setFixDraftMode(mode)
+          return current
+        })
+        flashFeedbackAction('Fix generated')
+      } catch (e) {
+        setFixDraftText(it.suggestion ?? '')
+        flashFeedbackAction(e instanceof Error ? e.message : 'Failed to generate fix')
+      } finally {
+        setIsGeneratingFix(false)
+      }
+    })()
+  }
+
+  const fetchNoteFeedback = async () => {
+    if (isLoadingFeedback) return
+    setHasRequestedFeedback(true)
+    setIsLoadingFeedback(true)
+    setFeedbackError('')
+    try {
+      const contentText = (editor?.getText() ?? '')
+        .replace(/\u00a0/g, ' ')
+        .trim()
+        .slice(0, 20_000)
+      if (!contentText) {
+        setFeedbackError('Add a bit more content to your note so I can critique it.')
+        setTrackedIssues([])
+        trackedIssuesRef.current = []
+        setAnnotationPins([])
+        return
+      }
+
+      const resp = await fetch('/api/note_feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          noteId: note.id,
+          title: title,
+          contentText,
+        }),
+      })
+
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        throw new Error(`Feedback request failed: ${resp.status} ${resp.statusText} ${body}`)
+      }
+
+      const data = (await resp.json()) as NoteFeedbackResponse
+      const items = Array.isArray(data.items) ? data.items : []
+      // Start tracking issues for persistent highlights + right-side annotations.
+      const nextIssues = items.map((it) => ({ ...it, localId: makeIssueId(it), resolved: false }))
+      setTrackedIssues(nextIssues)
+      trackedIssuesRef.current = nextIssues
+      window.requestAnimationFrame(() => computeAnnotationPins())
+      flashFeedbackAction(items.length ? `Found ${items.length} issue${items.length === 1 ? '' : 's'}` : 'No issues found')
+    } catch (e) {
+      setFeedbackError(e instanceof Error ? e.message : 'Failed to fetch feedback')
+      setTrackedIssues([])
+      trackedIssuesRef.current = []
+      setAnnotationPins([])
+    } finally {
+      setIsLoadingFeedback(false)
     }
   }
+
+  const reconcileIssues = () => {
+    if (!editor) return
+    const current = trackedIssuesRef.current
+    if (!current.length) return
+    const next = current.map((it) => {
+      if (it.resolved) return it
+      const found = findQuoteRangeInDoc(editor.state.doc, it.quote)
+      return found ? it : { ...it, resolved: true }
+    })
+    // Only update state if something changed.
+    const changed = next.some((n, i) => n.resolved !== current[i]?.resolved)
+    if (changed) setTrackedIssues(next)
+  }
+
+  const computeAnnotationPins = () => {
+    if (!editor) return
+    const wrap = editorWrapRef.current
+    const sc = editorScrollRef.current
+    if (!wrap || !sc) return
+
+    const wrapOffsetTop = wrap.offsetTop
+    const scRect = sc.getBoundingClientRect()
+    const active = trackedIssuesRef.current.filter((x) => !x.resolved)
+
+    const pins: Array<{ localId: string; top: number; issue: TrackedIssue }> = []
+    for (const it of active) {
+      const range = findQuoteRangeInDoc(editor.state.doc, it.quote)
+      if (!range) continue
+      const coords = editor.view.coordsAtPos(range.from)
+      const topInScroll = coords.top - scRect.top + sc.scrollTop
+      const top = Math.max(0, topInScroll - wrapOffsetTop)
+      pins.push({ localId: it.localId, top, issue: it })
+    }
+
+    // Collision avoidance: use measured card heights when available.
+    pins.sort((a, b) => a.top - b.top)
+    const minGap = 12
+    for (let i = 1; i < pins.length; i++) {
+      const prev = pins[i - 1]
+      const prevH = annotationHeightsRef.current[prev.localId] ?? 160
+      const minTop = prev.top + prevH + minGap
+      if (pins[i].top < minTop) pins[i].top = minTop
+    }
+
+    setAnnotationPins(pins)
+  }
+
+  useEffect(() => {
+    if (!editor) return
+    const onTxn = () => {
+      reconcileIssues()
+      computeAnnotationPins()
+    }
+    editor.on('transaction', onTxn)
+    return () => {
+      editor.off('transaction', onTxn)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    const sc = editorScrollRef.current
+    if (!sc) return
+    const onScroll = () => computeAnnotationPins()
+    sc.addEventListener('scroll', onScroll, { passive: true })
+    return () => sc.removeEventListener('scroll', onScroll)
+  }, [editor])
+
+  // After pins render (and whenever the fix editor opens), measure real card heights and reflow.
+  useEffect(() => {
+    if (!hasRequestedFeedback) return
+    const raf = window.requestAnimationFrame(() => {
+      const next: Record<string, number> = { ...annotationHeightsRef.current }
+      let changed = false
+      for (const p of annotationPins) {
+        const el = annotationCardRefs.current[p.localId]
+        if (!el) continue
+        const h = Math.max(72, Math.round(el.getBoundingClientRect().height))
+        if (next[p.localId] !== h) {
+          next[p.localId] = h
+          changed = true
+        }
+      }
+      if (changed) {
+        annotationHeightsRef.current = next
+        computeAnnotationPins()
+      }
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [annotationPins.length, hasRequestedFeedback, activeFixId])
+
+  // Auto-highlight (jump to) the first annotation when feedback appears.
+  useEffect(() => {
+    if (!hasRequestedFeedback) return
+    if (activeAnnotationId) return
+    const first = annotationPins[0]
+    if (!first) return
+    setActiveAnnotationId(first.localId)
+    // Defer until DOM selection is possible.
+    window.requestAnimationFrame(() => {
+      highlightQuoteInEditorDom(first.issue.quote)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotationPins, hasRequestedFeedback])
 
   const handleRecordingToggle = () => {
     if (isRecording) {
@@ -113,35 +858,31 @@ const NotesEditor: React.FC = () => {
         return data.choices[0].message.content
   }
 
-  const handleInput = () => {
-    if (mode != 'suggestion') return 
+  // Debounced AI suggestion while typing (only in "suggestion" mode).
+  useEffect(() => {
+    if (mode !== 'suggestion') return
+    if (!transcript.trim()) return
 
-    // clear existing timer
-    if (typingTimerRef.current) {
-      clearTimeout(typingTimerRef.current)
-    }
-    // clear existing suggestion while typing
     setSuggestion('')
-    typingTimerRef.current = setTimeout(async () => {
-      // current user text
-      const currentText = contentEditableRef.current?.textContent || ''
-      // transcript context
-      const context = currentText + (transcript ? '' + transcript : '')
+    const timer = window.setTimeout(async () => {
+      const typedText = editor?.getText() ?? ''
+      const context = `${typedText}${transcript ? ` ${transcript}` : ''}`
+      if (context.trim().length <= 10) return
 
-      if (context.trim().length > 10) {
         setIsLoadingSuggestion(true)
         try {
-          const aiSuggestion = await fetchAISuggestion(currentText, context)
+        const aiSuggestion = await fetchAISuggestion(typedText, context)
           setSuggestion(aiSuggestion)
           setTranscript('')
         } catch (error) {
-          console.error('Failed to fetch AI suggestion',error)
+        console.error('Failed to fetch AI suggestion', error)
         } finally {
           setIsLoadingSuggestion(false)
-        }
       }
-    }, 1500) // 1.5 second pause
-  }
+    }, 1500)
+
+    return () => window.clearTimeout(timer)
+  }, [editor, transcript, mode])
 
   const startRecording = async () => {
     const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || ''
@@ -169,6 +910,9 @@ const NotesEditor: React.FC = () => {
         if (transcriptText) {
           setTranscript(prev => prev + ' ' + transcriptText)
           if (mode == 'autocomplete') {
+            editor?.chain().focus().insertContent(`${transcriptText} `).run()
+            setSuggestion('')
+          } else {
             setSuggestion(prev => prev + ' ' + transcriptText)
           }
           
@@ -199,13 +943,75 @@ const NotesEditor: React.FC = () => {
     setTranscript('')
     setSuggestion('')
 
-    // clear active timer
-    if (typingTimerRef.current) {
-      clearTimeout(typingTimerRef.current)
-    }
-
     console.log('Recording stopped...')
     
+  }
+
+  const canFormat = useMemo(() => !!editor, [editor])
+  const canSubmitLink = useMemo(() => linkText.trim().length > 0 && linkUrl.trim().length > 0, [linkText, linkUrl])
+  const fmtClass = (active: boolean) => `format-button${active ? ' active' : ''}`
+
+  const openLinkModal = () => {
+    if (!editor) return
+    const { from, to, empty } = editor.state.selection
+    setLinkSelection({ from, to, empty })
+
+    if (empty) {
+      setLinkText('')
+      setLinkUrl('https://')
+    } else {
+      const selected = editor.state.doc.textBetween(from, to, ' ')
+      const previousUrl = editor.getAttributes('link').href as string | undefined
+      setLinkText(selected)
+      setLinkUrl(previousUrl ?? 'https://')
+    }
+
+    setIsLinkModalOpen(true)
+  }
+
+  const submitLink = () => {
+    if (!editor) return
+    if (!linkSelection) return
+    const href = linkUrl.trim()
+    const text = linkText.trim()
+    if (!href || !text) return
+
+    const { from, to, empty } = linkSelection
+    editor.chain().focus().setTextSelection({ from, to }).run()
+
+    if (empty) {
+      editor
+        .chain()
+        .focus()
+        .insertContent([
+          {
+            type: 'text',
+            text,
+            marks: [{ type: 'link', attrs: { href } }],
+          },
+          { type: 'text', text: ' ' },
+        ])
+        .run()
+    } else {
+      editor.chain().focus().extendMarkRange('link').setLink({ href }).run()
+    }
+
+    setIsLinkModalOpen(false)
+  }
+
+  const openImageModal = () => {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    setImageSelection({ from, to })
+    setImageUrl('')
+    setIsImageModalOpen(true)
+  }
+
+  const submitImageUrl = async () => {
+    const src = imageUrl.trim()
+    if (!src) return
+    await insertImageAtSelection({ src })
+    setIsImageModalOpen(false)
   }
 
   return (
@@ -214,16 +1020,164 @@ const NotesEditor: React.FC = () => {
         <input
           type="text"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value
+            setTitle(next)
+            onUpdate({ title: next })
+          }}
           className="note-title-input"
           placeholder="Note Title"
         />
       </div>
       <div className="editor-toolbar">
+        <div className="toolbar-group" aria-label="Markdown formatting">
+          <button
+            className={fmtClass(!!editor?.isActive('bold'))}
+            onClick={() => editor?.chain().focus().toggleBold().run()}
+            title="Bold"
+            type="button"
+            aria-label="Bold"
+            disabled={!canFormat}
+          >
+            B
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('italic'))}
+            onClick={() => editor?.chain().focus().toggleItalic().run()}
+            title="Italic"
+            type="button"
+            aria-label="Italic"
+            disabled={!canFormat}
+          >
+            I
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('strike'))}
+            onClick={() => editor?.chain().focus().toggleStrike().run()}
+            title="Strikethrough"
+            type="button"
+            aria-label="Strikethrough"
+            disabled={!canFormat}
+          >
+            S
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('code'))}
+            onClick={() => editor?.chain().focus().toggleCode().run()}
+            title="Inline code"
+            type="button"
+            aria-label="Inline code"
+            disabled={!canFormat}
+          >
+            <IconCode />
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('codeBlock'))}
+            onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+            title="Code block"
+            type="button"
+            aria-label="Code block"
+            disabled={!canFormat}
+          >
+            <IconCodeBlock />
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('blockquote'))}
+            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+            title="Blockquote"
+            type="button"
+            aria-label="Blockquote"
+            disabled={!canFormat}
+          >
+            <IconQuote />
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('bulletList'))}
+            onClick={() => editor?.chain().focus().toggleBulletList().run()}
+            title="Bullet list"
+            type="button"
+            aria-label="Bullet list"
+            disabled={!canFormat}
+          >
+            •
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('orderedList'))}
+            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+            title="Numbered list"
+            type="button"
+            aria-label="Numbered list"
+            disabled={!canFormat}
+          >
+            1.
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('link'))}
+            onClick={openLinkModal}
+            title="Link"
+            type="button"
+            aria-label="Insert link"
+            disabled={!canFormat}
+          >
+            <IconLink />
+          </button>
+          <button
+            className={fmtClass(false)}
+            onClick={() => {
+              openImageModal()
+            }}
+            title="Image"
+            type="button"
+            aria-label="Insert image"
+            disabled={!canFormat}
+          >
+            <IconImage />
+          </button>
+        </div>
+
+        <div className="toolbar-separator" role="separator" aria-orientation="vertical" />
+
+        <div className="toolbar-group" aria-label="Headings">
+          <button
+            className={fmtClass(!!editor?.isActive('heading', { level: 1 }))}
+            onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+            title="Heading 1"
+            type="button"
+            aria-label="Heading 1"
+            disabled={!canFormat}
+          >
+            H1
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('heading', { level: 2 }))}
+            onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+            title="Heading 2"
+            type="button"
+            aria-label="Heading 2"
+            disabled={!canFormat}
+          >
+            H2
+          </button>
+          <button
+            className={fmtClass(!!editor?.isActive('heading', { level: 3 }))}
+            onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
+            title="Heading 3"
+            type="button"
+            aria-label="Heading 3"
+            disabled={!canFormat}
+          >
+            H3
+          </button>
+        </div>
+
+        <div className="toolbar-separator" role="separator" aria-orientation="vertical" />
+
+        <div className="toolbar-group" aria-label="AI modes">
         <button 
           className={`mode-button ${mode === 'autocomplete' ? 'active' : ''}`}
           onClick={() => setMode('autocomplete')}
           title="Autocomplete mode"
+            type="button"
         >
           Autocomplete
         </button>
@@ -232,27 +1186,320 @@ const NotesEditor: React.FC = () => {
           className={`mode-button ${mode === 'suggestion' ? 'active': ''}`}
           onClick={() => setMode('suggestion')}
           title="suggestion mode"
+            type="button"
         >
           Suggestion
         </button>
+        </div>
+
+        <div className="toolbar-separator" role="separator" aria-orientation="vertical" />
+
+        <div className="toolbar-group" aria-label="Recording">
         <button
           className={`record-button ${isRecording ? 'recording' : ''}`}
           onClick={handleRecordingToggle}
           title={isRecording ? 'Stop Recording' : 'Start Recording'}
+            type="button"
         >
           <span className="record-icon"></span>
           {isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
+        </div>
       </div>
-      <div className="editor-content">
-        <div
-          ref={contentEditableRef}
-          contentEditable="true"
-          className="note-textarea"
-          data-placeholder="Start typing your notes here..."
-          onKeyDown={handleKeyDown}
-          onInput={handleInput}
-        />
+      <div className="editor-content" ref={editorScrollRef}>
+        {(() => {
+          const unresolvedCount = trackedIssues.filter((x) => !x.resolved).length
+          const showAnnotations = hasRequestedFeedback && (isLoadingFeedback || !!feedbackError || unresolvedCount > 0 || activeFixId !== null)
+          if (!showAnnotations) {
+            return (
+              <div className="wysiwyg-editor-container">
+                <EditorContent editor={editor} />
+              </div>
+            )
+          }
+
+          return (
+          <div className="editor-with-annotations" ref={editorWrapRef}>
+            <div className="wysiwyg-editor-container">
+              <EditorContent editor={editor} />
+            </div>
+
+            <div className="note-annotations" aria-label="Note feedback annotations">
+              {feedbackActionMsg ? (
+                <div className="note-annotations-toast" role="status" aria-live="polite">
+                  {feedbackActionMsg}
+                </div>
+              ) : null}
+
+              {feedbackError ? <div className="note-annotations-error">{feedbackError}</div> : null}
+
+              {annotationPins.map((p) => (
+                <div
+                  key={p.localId}
+                  ref={(el) => {
+                    annotationCardRefs.current[p.localId] = el
+                  }}
+                  className={`note-annotation note-annotation--${p.issue.kind}${
+                    activeAnnotationId === p.localId ? ' note-annotation--active' : ''
+                  }`}
+                  style={{ top: `${p.top}px` }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Note feedback annotation"
+                  onClick={() => {
+                    setActiveAnnotationId(p.localId)
+                    const ok = highlightQuoteInEditorDom(p.issue.quote)
+                    if (!ok) setFeedbackError('Could not find that quoted text in the editor (it may have changed).')
+                    else setFeedbackError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setActiveAnnotationId(p.localId)
+                      const ok = highlightQuoteInEditorDom(p.issue.quote)
+                      if (!ok) setFeedbackError('Could not find that quoted text in the editor (it may have changed).')
+                      else setFeedbackError('')
+                    }
+                  }}
+                >
+                  <div className="note-annotation-title">
+                    {p.issue.kind === 'missing'
+                      ? 'Missing info'
+                      : p.issue.kind === 'inaccurate'
+                        ? 'Might be inaccurate'
+                        : 'Needs specificity'}
+                  </div>
+                  <div className="note-annotation-quote">“{p.issue.quote}”</div>
+                  <div className="note-annotation-issue">{p.issue.issue}</div>
+                  <div className="note-annotation-suggestion">
+                    <div className="note-annotation-suggestion-label">Suggested fix</div>
+                    <div className="note-annotation-suggestion-text">{p.issue.suggestion}</div>
+                  </div>
+
+                  {activeFixId === p.localId ? (
+                    <div className="note-annotation-fixbox">
+                      {isGeneratingFix ? (
+                        <div className="note-annotation-fixbox-loading" role="status" aria-live="polite">
+                          Generating fix…
+                        </div>
+                      ) : null}
+                      <label className="note-annotation-fixbox-label">
+                        Apply mode
+                        <select
+                          className="note-annotation-fixbox-select"
+                          value={fixDraftMode}
+                          onChange={(e) => setFixDraftMode(e.target.value as 'insert' | 'replace')}
+                          disabled={isGeneratingFix}
+                        >
+                          <option value="insert">Insert after highlight</option>
+                          <option value="replace">Replace highlighted text</option>
+                        </select>
+                      </label>
+                      <label className="note-annotation-fixbox-label">
+                        Fix text
+                        <textarea
+                          className="note-annotation-fixbox-textarea"
+                          value={fixDraftText}
+                          onChange={(e) => setFixDraftText(e.target.value)}
+                          rows={4}
+                          disabled={isGeneratingFix}
+                        />
+                      </label>
+                      <div className="note-annotation-actions">
+                        <button
+                          type="button"
+                          className="note-annotation-action primary"
+                          onClick={() => {
+                            commitFeedbackFix(p.issue, fixDraftText, fixDraftMode)
+                            setActiveFixId(null)
+                            resolveTrackedIssue(p.localId)
+                          }}
+                          title="Apply this change to the note (undo with Cmd+Z)"
+                          disabled={isGeneratingFix || !fixDraftText.trim()}
+                        >
+                          Apply to note
+                        </button>
+                        <button
+                          type="button"
+                          className="note-annotation-action secondary"
+                          onClick={() => setActiveFixId(null)}
+                          disabled={isGeneratingFix}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="note-annotation-actions">
+                    <button type="button" className="note-annotation-action primary" onClick={() => openFixReview(p.issue)}>
+                      Generate fix
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          )
+        })()}
+
+        <button
+          type="button"
+          className="note-feedback-fab"
+          onClick={() => void fetchNoteFeedback()}
+          disabled={!canFormat || isLoadingFeedback}
+          title="Get feedback on this note"
+          aria-label="Get feedback on this note"
+        >
+          {isLoadingFeedback ? 'Checking…' : 'Note feedback'}
+        </button>
+
+        {isLinkModalOpen ? (
+          <div
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Insert link"
+            onMouseDown={() => setIsLinkModalOpen(false)}
+          >
+            <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="modal-title">Insert link</div>
+
+              <label className="modal-label">
+                Text
+                <input
+                  className="modal-input"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  placeholder="Link text"
+                  autoFocus
+                />
+              </label>
+
+              <label className="modal-label">
+                URL
+                <input
+                  className="modal-input"
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  placeholder="https://example.com"
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button
+                  className="modal-button secondary"
+                  type="button"
+                  onClick={() => setIsLinkModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="modal-button primary"
+                  type="button"
+                  onClick={submitLink}
+                  disabled={!canSubmitLink}
+                >
+                  Insert
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isImageModalOpen ? (
+          <div
+            className="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Insert image"
+            onMouseDown={() => setIsImageModalOpen(false)}
+          >
+            <div className="modal-card" onMouseDown={(e) => e.stopPropagation()}>
+              <div className="modal-title">Insert image</div>
+
+              <label className="modal-label">
+                Upload
+                <input
+                  className="modal-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    try {
+                      const src = await readFileAsDataUrl(file)
+                      await insertImageAtSelection({ src })
+                      setIsImageModalOpen(false)
+                    } catch (err) {
+                      console.error('Failed to upload image', err)
+                    }
+                  }}
+                />
+              </label>
+
+              <label className="modal-label">
+                Or paste / enter URL
+                <input
+                  className="modal-input"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://example.com/image.png"
+                  onPaste={(e) => {
+                    const items = Array.from(e.clipboardData.items)
+                    const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'))
+                    if (!imageItem) return
+                    const file = imageItem.getAsFile()
+                    if (!file) return
+
+                    e.preventDefault()
+                    ;(async () => {
+                      try {
+                        const src = await readFileAsDataUrl(file)
+                        await insertImageAtSelection({ src })
+                        setIsImageModalOpen(false)
+                      } catch (err) {
+                        console.error('Failed to paste image into modal', err)
+                      }
+                    })()
+                  }}
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button
+                  className="modal-button secondary"
+                  type="button"
+                  onClick={() => setIsImageModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="modal-button primary"
+                  type="button"
+                  onClick={submitImageUrl}
+                  disabled={!imageUrl.trim()}
+                >
+                  Insert
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {(isLoadingSuggestion || suggestion.trim()) && mode === 'suggestion' ? (
+          <div className="suggestion-bar" role="status" aria-live="polite">
+            {isLoadingSuggestion ? (
+              <span className="suggestion-muted">Thinking…</span>
+            ) : (
+              <>
+                <span className="suggestion-muted">Press Tab to accept:</span>
+                <span className="suggestion-text-inline">{suggestion}</span>
+              </>
+            )}
+          </div>
+        ) : null}
+
       </div>
     </div>
   )

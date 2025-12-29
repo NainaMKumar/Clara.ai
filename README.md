@@ -5,22 +5,26 @@ AI-powered note-taking app built for students that seamlessly combines voice tra
 ## Features
 
 ### 🎙️ Real-time Voice Transcription
+
 Record lectures or meetings using Deepgram's speech-to-text API. Your recording is transcribed in real time as you take notes
 
 ### 🔄 Dual Input Modes
 
 **Autocomplete Mode**
+
 - Voice transcription appears as inline gray text
 - Press TAB to accept and insert the transcribed text
 - Perfect for capturing lectures verbatim
 
 **Suggestion Mode**
+
 - Type naturally while recording
 - Pause typing to trigger AI suggestions
 - Get smart completions that match your writing style
 - Press TAB to accept suggestions
 
 ### 📝 Markdown Support
+
 Full markdown rendering in the notes editor for rich formatting.
 
 ## Getting Started
@@ -31,6 +35,7 @@ Full markdown rendering in the notes editor for rich formatting.
 - npm or yarn
 - Deepgram API key ([Get one here](https://deepgram.com))
 - OpenAI API key ([Get one here](https://platform.openai.com))
+- Tavily API key ([Get one here](https://tavily.com)) — used for source-backed “Note feedback”
 
 ### Installation
 
@@ -45,6 +50,7 @@ npm install
 # Create .env file and add your API keys
 echo "VITE_DEEPGRAM_API_KEY=your_deepgram_key_here" > .env
 echo "VITE_OPENAI_API_KEY=your_openai_key_here" >> .env
+echo "TAVILY_API_KEY=your_tavily_key_here" >> .env
 
 # Start development server
 npm run dev
