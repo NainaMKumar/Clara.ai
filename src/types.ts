@@ -1,8 +1,16 @@
+export interface Folder {
+  id: string
+  name: string
+  color?: string
+  createdDate: string
+}
+
 export interface Note {
   id: string
   title: string
   content: string
   date: string
+  folderId?: string
 }
 
 export type NoteFeedbackKind = 'missing' | 'inaccurate' | 'specificity'

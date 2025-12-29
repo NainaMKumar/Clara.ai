@@ -1,10 +1,12 @@
 import React from 'react'
 import './DemoVisual.css'
+import prototype from './prototype.png'
 
 const DemoVisual: React.FC = () => {
   return (
     <div className="demo-visual">
-      <div className="demo-window">
+      <img src={prototype} alt="Prototype" className="prototype"/>
+      {/* <div className="demo-window">
         <div className="demo-header">
           <div className="dot"></div>
           <div className="dot"></div>
@@ -21,7 +23,7 @@ const DemoVisual: React.FC = () => {
           </div>
           <div className="demo-line recording">Recording... 15:23</div>
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }

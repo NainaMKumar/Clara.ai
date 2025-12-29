@@ -182,7 +182,7 @@ function createFeedbackHighlightExtension(issuesRef: React.MutableRefObject<Trac
       return [
         new Plugin({
           props: {
-            decorations(state) {
+            decorations(state: any) {
               const issues = issuesRef.current.filter((x) => !x.resolved)
               if (!issues.length) return null
               const decos: Decoration[] = []
@@ -348,8 +348,9 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       editorProps: {
         attributes: {
           class: 'wysiwyg-editor',
+          'data-placeholder': 'Start taking notes here...',
         },
-        handleKeyDown: (_view, event) => {
+        handleKeyDown: (_view: any, event: any) => {
           if (event.key === 'Tab' && suggestion.trim()) {
             event.preventDefault()
             // Accept the suggestion at the current cursor position.
@@ -369,12 +370,12 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           }
           return false
         },
-        handlePaste: (_view, event) => {
+        handlePaste: (_view: any, event: any) => {
           // Allow direct image pasting into the editor: insert image at cursor.
           const clipboard = event.clipboardData
           if (!clipboard) return false
 
-          const items = Array.from(clipboard.items)
+          const items = Array.from(clipboard.items) as DataTransferItem[]
           const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'))
           if (!imageItem) return false
 
@@ -394,7 +395,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           return true
         },
       },
-      onUpdate: ({ editor }) => {
+      onUpdate: ({ editor }: any) => {
         const html = editor.getHTML()
         onUpdate({ content: html })
         if (suggestion) setSuggestion('')
@@ -865,13 +866,15 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
     setSuggestion('')
     const timer = window.setTimeout(async () => {
-      const typedText = editor?.getText() ?? ''
-      const context = `${typedText}${transcript ? ` ${transcript}` : ''}`
+      // current user text
+      const currentText = editor?.getText() ?? ''
+      // transcript context
+      const context = currentText + (transcript ? '' + transcript : '')
       if (context.trim().length <= 10) return
 
         setIsLoadingSuggestion(true)
         try {
-        const aiSuggestion = await fetchAISuggestion(typedText, context)
+        const aiSuggestion = await fetchAISuggestion(currentText, context)
           setSuggestion(aiSuggestion)
           setTranscript('')
         } catch (error) {
@@ -1446,7 +1449,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                   onChange={(e) => setImageUrl(e.target.value)}
                   placeholder="https://example.com/image.png"
                   onPaste={(e) => {
-                    const items = Array.from(e.clipboardData.items)
+                    const items = Array.from(e.clipboardData.items) as DataTransferItem[]
                     const imageItem = items.find((it) => it.kind === 'file' && it.type.startsWith('image/'))
                     if (!imageItem) return
                     const file = imageItem.getAsFile()

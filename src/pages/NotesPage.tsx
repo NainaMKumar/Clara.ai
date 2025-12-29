@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import Sidebar from '../components/Sidebar'
 import NotesEditor from '../components/NotesEditor'
-import { Note } from '../types'
+import { Note, Folder } from '../types'
 import './NotesPage.css'
 import * as rag from '../rag/rag'
 
@@ -17,12 +17,22 @@ const NotesPage: React.FC = () => {
       {
         id: '1',
         title: 'Welcome to Clara',
-        content: 'Start taking notes here...',
+        content: '',
         date: new Date().toLocaleDateString(),
       },
     ]
   })
-  
+
+  const [folders, setFolders] = useState<Folder[]>(() => {
+    try {
+      const raw = localStorage.getItem('clara_folders_v1')
+      if (raw) return JSON.parse(raw) as Folder[]
+    } catch {
+      // ignore
+    }
+    return []
+  })
+
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>('1')
   const [ragQuestion, setRagQuestion] = useState('')
   const [ragAnswer, setRagAnswer] = useState<string>('')
@@ -49,16 +59,49 @@ const NotesPage: React.FC = () => {
     }
   }, [notes])
 
-  const handleNewNote = () => {
+  // Persist folders
+  useEffect(() => {
+    try {
+      localStorage.setItem('clara_folders_v1', JSON.stringify(folders))
+    } catch {
+      // ignore
+    }
+  }, [folders])
+
+  const handleNewNote = (folderId?: string) => {
     const newNote: Note = {
       id: Date.now().toString(),
       title: 'New Note',
       content: '',
-      date: new Date().toLocaleDateString()
+      date: new Date().toLocaleDateString(),
+      folderId
     }
     setNotes([newNote, ...notes])
     setSelectedNoteId(newNote.id)
     scheduleIndex(newNote)
+  }
+
+  const handleNewFolder = () => {
+    const newFolder: Folder = {
+      id: Date.now().toString(),
+      name: 'New Folder',
+      createdDate: new Date().toLocaleDateString()
+    }
+    setFolders([...folders, newFolder])
+  }
+
+  const handleDeleteFolder = (id: string) => {
+    setFolders(folders.filter(f => f.id !== id))
+    // Unassign notes from deleted folder
+    setNotes(notes.map(note =>
+      note.folderId === id ? { ...note, folderId: undefined } : note
+    ))
+  }
+
+  const handleRenameFolder = (id: string, name: string) => {
+    setFolders(folders.map(f =>
+      f.id === id ? { ...f, name } : f
+    ))
   }
 
   const handleNoteUpdate = (id: string, updatedFields: Partial<Note>) => {
@@ -150,11 +193,15 @@ const NotesPage: React.FC = () => {
 
   return (
     <div className="notes-page">
-      <Sidebar 
-        notes={notes} 
-        onSelectNote={handleNoteSelect} 
+      <Sidebar
+        notes={notes}
+        folders={folders}
+        onSelectNote={handleNoteSelect}
         onNewNote={handleNewNote}
         onDeleteNote={handleDeleteNote}
+        onNewFolder={handleNewFolder}
+        onDeleteFolder={handleDeleteFolder}
+        onRenameFolder={handleRenameFolder}
         selectedNoteId={selectedNoteId}
       />
       <div className="notes-main">
