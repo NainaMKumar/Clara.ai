@@ -9,17 +9,34 @@ const Hero: React.FC = () => {
 
   useEffect(() => {
     let currentIndex = 0
-    const typingInterval = setInterval(() => {
-      if (currentIndex <= fullText.length) {
+    let isDeleting = false
+    let typingSpeed = 100
+
+    const type = () => {
+      if (!isDeleting && currentIndex <= fullText.length) {
         setDisplayedText(fullText.slice(0, currentIndex))
         currentIndex++
-      } else {
-        clearInterval(typingInterval)
-        setShowCursor(false)
+        typingSpeed = 100
+      } else if (!isDeleting && currentIndex > fullText.length) {
+        // Finished typing, wait before deleting
+        typingSpeed = 2000
+        isDeleting = true
+      } else if (isDeleting && currentIndex > 0) {
+        // Deleting
+        currentIndex--
+        setDisplayedText(fullText.slice(0, currentIndex))
+        typingSpeed = 50
+      } else if (isDeleting && currentIndex === 0) {
+        // Finished deleting, wait before typing again
+        isDeleting = false
+        typingSpeed = 500
       }
-    }, 100) // Adjust speed here (milliseconds per character)
 
-    return () => clearInterval(typingInterval)
+      setTimeout(type, typingSpeed)
+    }
+
+    const timeout = setTimeout(type, typingSpeed)
+    return () => clearTimeout(timeout)
   }, [])
 
   return (
