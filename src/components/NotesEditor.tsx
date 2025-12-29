@@ -1,15 +1,208 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
+import { Extension } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import { Plugin } from 'prosemirror-state'
+import { Decoration, DecorationSet } from 'prosemirror-view'
 import './NotesEditor.css'
 
 import type { Note } from '../types'
+import type { NoteFeedbackFixContext, NoteFeedbackFixResponse, NoteFeedbackItem, NoteFeedbackResponse } from '../types'
 
 type NotesEditorProps = {
   note: Note
   onUpdate: (fields: Partial<Note>) => void
+}
+
+type TrackedIssue = NoteFeedbackItem & {
+  localId: string
+  resolved: boolean
+}
+
+function makeIssueId(it: NoteFeedbackItem) {
+  // Stable enough for UI keys; avoids bringing in hashing deps.
+  return `${it.kind}:${it.quote}:${it.issue}`.slice(0, 200)
+}
+
+function normalizeForSearch(s: string) {
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+function toPlainTextContent(text: string): Array<{ type: string; text?: string }> {
+  // TipTap/ProseMirror-friendly representation that preserves newlines as hardBreaks.
+  const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n')
+  const out: Array<{ type: string; text?: string }> = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line) out.push({ type: 'text', text: line })
+    if (i < lines.length - 1) out.push({ type: 'hardBreak' })
+  }
+  return out
+}
+
+function toParagraphNodeFromText(text: string) {
+  return {
+    type: 'paragraph',
+    content: toPlainTextContent(text),
+  }
+}
+
+function findReasonableInsertPosAfterBlock(doc: any, from: number): number {
+  // Insert AFTER the surrounding block (paragraph/listItem/heading/etc), not at the exact highlight position.
+  // Fallback: end of document.
+  try {
+    const $pos = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+    // Find nearest block at/above this position.
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node && node.isBlock) {
+        // Position right after this block node.
+        const after = $pos.after(d)
+        if (Number.isFinite(after)) return after
+      }
+    }
+  } catch {
+    // ignore
+  }
+  // ProseMirror doc end position (inside the doc node).
+  return Math.max(0, (doc?.content?.size ?? 0))
+}
+
+function getStructuralContextAtPos(doc: any, from: number): NoteFeedbackFixContext {
+  try {
+    const $pos = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+    // If within a list item, capture list type.
+    for (let d = $pos.depth; d >= 1; d--) {
+      const node = $pos.node(d)
+      const name = node?.type?.name
+      if (name === 'listItem') {
+        const parentName = $pos.node(d - 1)?.type?.name
+        const listType = parentName === 'bulletList' || parentName === 'orderedList' ? parentName : undefined
+        const blockText = String(node.textContent ?? '').slice(0, 900)
+        return { containerType: 'listItem', listType, blockText }
+      }
+    }
+    // Otherwise nearest block.
+    for (let d = $pos.depth; d >= 0; d--) {
+      const node = $pos.node(d)
+      if (node?.isBlock) {
+        return { containerType: String(node.type?.name ?? 'block'), blockText: String(node.textContent ?? '').slice(0, 900) }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { containerType: 'unknown' }
+}
+
+function getListInsertTarget(doc: any, from: number): { pos: number; listType: 'bulletList' | 'orderedList' } | null {
+  try {
+    const $pos = doc.resolve(Math.max(0, Math.min(from, doc.content.size)))
+    for (let d = $pos.depth; d >= 1; d--) {
+      const node = $pos.node(d)
+      if (node?.type?.name !== 'listItem') continue
+      const parentName = $pos.node(d - 1)?.type?.name
+      if (parentName !== 'bulletList' && parentName !== 'orderedList') continue
+      const posAfterListItem = $pos.after(d) // inside list
+      return { pos: posAfterListItem, listType: parentName }
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function findQuoteRangeInDoc(doc: any, quote: string): { from: number; to: number } | null {
+  const q = normalizeForSearch(quote)
+  if (!q) return null
+
+  let combined = ''
+  const map: number[] = [] // character index -> doc position
+
+  doc.descendants((node: any, pos: number) => {
+    if (!node.isText) return true
+    const text = String(node.text ?? '')
+    for (let i = 0; i < text.length; i++) {
+      combined += text[i]
+      map.push(pos + i)
+    }
+    return true
+  })
+
+  const hay = normalizeForSearch(combined)
+  // We normalized whitespace; mapping is approximate but works well for short quotes.
+  const idx = hay.indexOf(q)
+  if (idx < 0) return null
+
+  // Convert normalized index back to raw index by scanning both strings together.
+  // This keeps decoration placement close even when multiple spaces/newlines exist.
+  let rawStart = 0
+  let normSeen = 0
+  const raw = combined
+  while (rawStart < raw.length && normSeen < idx) {
+    const ch = raw[rawStart]
+    const isWs = /\s/.test(ch)
+    if (isWs) {
+      // Count this whitespace only if it starts a collapsed whitespace run.
+      const prev = rawStart > 0 ? raw[rawStart - 1] : ''
+      if (!/\s/.test(prev)) normSeen += 1
+    } else {
+      normSeen += 1
+    }
+    rawStart += 1
+  }
+
+  let rawEnd = rawStart
+  let normNeed = q.length
+  let normCount = 0
+  while (rawEnd < raw.length && normCount < normNeed) {
+    const ch = raw[rawEnd]
+    const isWs = /\s/.test(ch)
+    if (isWs) {
+      const prev = rawEnd > 0 ? raw[rawEnd - 1] : ''
+      if (!/\s/.test(prev)) normCount += 1
+    } else {
+      normCount += 1
+    }
+    rawEnd += 1
+  }
+
+  const from = map[rawStart]
+  const to = map[Math.max(rawStart, rawEnd - 1)]
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+  return { from, to: to + 1 }
+}
+
+function createFeedbackHighlightExtension(issuesRef: React.MutableRefObject<TrackedIssue[]>) {
+  return Extension.create({
+    name: 'feedbackHighlight',
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          props: {
+            decorations(state) {
+              const issues = issuesRef.current.filter((x) => !x.resolved)
+              if (!issues.length) return null
+              const decos: Decoration[] = []
+              for (const it of issues) {
+                const range = findQuoteRangeInDoc(state.doc, it.quote)
+                if (!range) continue
+                decos.push(
+                  Decoration.inline(range.from, range.to, {
+                    class: `note-feedback-highlight note-feedback-highlight--${it.kind}`,
+                    'data-feedback-id': it.localId,
+                  })
+                )
+              }
+              return DecorationSet.create(state.doc, decos)
+            },
+          },
+        }),
+      ]
+    },
+  })
 }
 
 function IconLink() {
@@ -105,6 +298,23 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
   const [imageSelection, setImageSelection] = useState<{ from: number; to: number } | null>(null)
+  const [isLoadingFeedback, setIsLoadingFeedback] = useState(false)
+  const [feedbackError, setFeedbackError] = useState<string>('')
+  const [feedbackActionMsg, setFeedbackActionMsg] = useState<string>('')
+  const feedbackActionTimerRef = useRef<number | null>(null)
+  const [trackedIssues, setTrackedIssues] = useState<TrackedIssue[]>([])
+  const trackedIssuesRef = useRef<TrackedIssue[]>([])
+  const [hasRequestedFeedback, setHasRequestedFeedback] = useState(false)
+  const editorScrollRef = useRef<HTMLDivElement | null>(null)
+  const editorWrapRef = useRef<HTMLDivElement | null>(null)
+  const [annotationPins, setAnnotationPins] = useState<Array<{ localId: string; top: number; issue: TrackedIssue }>>([])
+  const annotationCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const annotationHeightsRef = useRef<Record<string, number>>({})
+  const [activeAnnotationId, setActiveAnnotationId] = useState<string | null>(null)
+  const [activeFixId, setActiveFixId] = useState<string | null>(null)
+  const [fixDraftText, setFixDraftText] = useState<string>('')
+  const [fixDraftMode, setFixDraftMode] = useState<'insert' | 'replace'>('insert')
+  const [isGeneratingFix, setIsGeneratingFix] = useState(false)
 
   const insertImageAtSelection = async (opts: { src: string }) => {
     if (!editor) return
@@ -132,6 +342,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           linkOnPaste: true,
         }),
         Image,
+        createFeedbackHighlightExtension(trackedIssuesRef),
       ],
       content: toEditorHtml(note.content),
       editorProps: {
@@ -213,9 +424,400 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     setTitle(note.title)
     setTranscript('')
       setSuggestion('')
+    setIsLoadingFeedback(false)
+    setFeedbackError('')
+    setFeedbackActionMsg('')
+    setTrackedIssues([])
+    trackedIssuesRef.current = []
+    setAnnotationPins([])
+    setHasRequestedFeedback(false)
+    setActiveAnnotationId(null)
+    setActiveFixId(null)
+    setFixDraftText('')
+    setFixDraftMode('insert')
+    setIsGeneratingFix(false)
+    if (feedbackActionTimerRef.current) {
+      window.clearTimeout(feedbackActionTimerRef.current)
+      feedbackActionTimerRef.current = null
+    }
     // If you switch notes mid-recording, stop cleanly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id])
+
+  useEffect(() => {
+    trackedIssuesRef.current = trackedIssues
+  }, [trackedIssues])
+
+  const flashFeedbackAction = (msg: string) => {
+    setFeedbackActionMsg(msg)
+    if (feedbackActionTimerRef.current) window.clearTimeout(feedbackActionTimerRef.current)
+    feedbackActionTimerRef.current = window.setTimeout(() => {
+      setFeedbackActionMsg('')
+      feedbackActionTimerRef.current = null
+    }, 2200)
+  }
+
+  const highlightQuoteInEditorDom = (quote: string): boolean => {
+    if (!editor) return false
+    const q = quote.trim()
+    if (!q) return false
+
+    const root = editor.view.dom as HTMLElement | null
+    if (!root) return false
+
+    // Collect text nodes in DOM order.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.nodeValue ?? ''
+        return text.trim().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      },
+    })
+
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    if (!nodes.length) return false
+
+    // Build a combined string + index mapping into individual text nodes.
+    let combined = ''
+    const map: Array<{ node: Text; offset: number }> = []
+    for (const n of nodes) {
+      const text = n.nodeValue ?? ''
+      for (let i = 0; i < text.length; i++) {
+        combined += text[i]
+        map.push({ node: n, offset: i })
+      }
+    }
+
+    const idx = combined.indexOf(q)
+    if (idx < 0) return false
+    const endIdx = idx + q.length - 1
+    const start = map[idx]
+    const end = map[endIdx]
+    if (!start || !end) return false
+
+    const range = document.createRange()
+    range.setStart(start.node, start.offset)
+    range.setEnd(end.node, end.offset + 1)
+
+    const sel = window.getSelection()
+    if (!sel) return false
+    sel.removeAllRanges()
+    sel.addRange(range)
+
+    // Scroll to selection.
+    const targetEl = (end.node.parentElement ?? start.node.parentElement) as HTMLElement | null
+    targetEl?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    return true
+  }
+
+  const locateQuoteInEditorDom = (quote: string): { from: number; to: number } | null => {
+    if (!editor) return null
+    const q = quote.trim()
+    if (!q) return null
+
+    const root = editor.view.dom as HTMLElement | null
+    if (!root) return null
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.nodeValue ?? ''
+        return text.trim().length ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT
+      },
+    })
+
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    if (!nodes.length) return null
+
+    let combined = ''
+    const map: Array<{ node: Text; offset: number }> = []
+    for (const n of nodes) {
+      const text = n.nodeValue ?? ''
+      for (let i = 0; i < text.length; i++) {
+        combined += text[i]
+        map.push({ node: n, offset: i })
+      }
+    }
+
+    const idx = combined.indexOf(q)
+    if (idx < 0) return null
+    const endIdx = idx + q.length - 1
+    const start = map[idx]
+    const end = map[endIdx]
+    if (!start || !end) return null
+
+    // Map DOM positions to ProseMirror document positions.
+    const from = editor.view.posAtDOM(start.node, start.offset)
+    const to = editor.view.posAtDOM(end.node, end.offset + 1)
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return null
+    return { from: Math.max(0, from), to: Math.max(0, to) }
+  }
+
+  const commitFeedbackFix = (it: NoteFeedbackItem, suggestionOverride?: string, modeOverride?: 'insert' | 'replace') => {
+    if (!editor) return
+    // Prefer doc-based lookup (more robust vs whitespace/DOM differences),
+    // fall back to DOM-based lookup if needed.
+    const loc = findQuoteRangeInDoc(editor.state.doc, it.quote) ?? locateQuoteInEditorDom(it.quote)
+    if (!loc) {
+      setFeedbackError('Could not find that quoted text in the editor (it may have changed).')
+      return
+    }
+
+    setFeedbackError('')
+
+    const suggestion = (suggestionOverride ?? it.suggestion).trim()
+    if (!suggestion) return
+
+    const mode: 'insert' | 'replace' =
+      modeOverride ?? (it.kind === 'inaccurate' ? 'replace' : 'insert')
+
+    if (mode === 'replace') {
+      // Replace the quoted claim with the suggested correction.
+      editor
+        .chain()
+        .focus()
+        .insertContentAt({ from: loc.from, to: loc.to }, toPlainTextContent(suggestion))
+        .run()
+      flashFeedbackAction('Applied: replaced text (undo with Cmd+Z)')
+      return
+    }
+
+    // Insert the suggestion where it makes sense: after the surrounding block (usually the paragraph),
+    // as a new paragraph, rather than inline at the highlight location.
+    const listTarget = getListInsertTarget(editor.state.doc, loc.from)
+    if (listTarget) {
+      // Preserve list structure: add a new list item in the same list.
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(listTarget.pos, {
+          type: 'listItem',
+          content: [toParagraphNodeFromText(suggestion)],
+        })
+        .run()
+    } else {
+      const insertPos = findReasonableInsertPosAfterBlock(editor.state.doc, loc.from)
+      editor.chain().focus().insertContentAt(insertPos, toParagraphNodeFromText(suggestion)).run()
+    }
+    flashFeedbackAction('Applied: inserted fix (undo with Cmd+Z)')
+  }
+
+  const resolveTrackedIssue = (localId: string) => {
+    setTrackedIssues((prev) => prev.map((x) => (x.localId === localId ? { ...x, resolved: true } : x)))
+    // Keep ref in sync immediately for decoration + pin calculations.
+    trackedIssuesRef.current = trackedIssuesRef.current.map((x) => (x.localId === localId ? { ...x, resolved: true } : x))
+    window.requestAnimationFrame(() => computeAnnotationPins())
+  }
+
+  const openFixReview = (it: TrackedIssue) => {
+    setActiveFixId(it.localId)
+    setFixDraftMode(it.kind === 'inaccurate' ? 'replace' : 'insert')
+    setFixDraftText('')
+    setIsGeneratingFix(true)
+    flashFeedbackAction('Generating fix…')
+
+    ;(async () => {
+      try {
+        const contentText = (editor?.getText() ?? '')
+          .replace(/\u00a0/g, ' ')
+          .trim()
+          .slice(0, 20_000)
+        if (!contentText) throw new Error('Note is empty')
+
+        const loc = findQuoteRangeInDoc(editor?.state.doc, it.quote) ?? locateQuoteInEditorDom(it.quote)
+        const context = loc ? getStructuralContextAtPos(editor?.state.doc, loc.from) : { containerType: 'unknown' }
+
+        const resp = await fetch('/api/note_feedback_fix', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            noteId: note.id,
+            title,
+            contentText,
+            item: it,
+            preferredMode: it.kind === 'inaccurate' ? 'replace' : 'insert',
+            context,
+          }),
+        })
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => '')
+          throw new Error(`Fix generation failed: ${resp.status} ${resp.statusText} ${body}`)
+        }
+        const data = (await resp.json()) as NoteFeedbackFixResponse
+        const fixText = String(data.fixText ?? '').trim()
+        const mode = data.mode === 'replace' ? 'replace' : 'insert'
+
+        // Only update if this issue is still the active one.
+        setActiveFixId((current) => {
+          if (current !== it.localId) return current
+          setFixDraftText(fixText || it.suggestion || '')
+          setFixDraftMode(mode)
+          return current
+        })
+        flashFeedbackAction('Fix generated')
+      } catch (e) {
+        setFixDraftText(it.suggestion ?? '')
+        flashFeedbackAction(e instanceof Error ? e.message : 'Failed to generate fix')
+      } finally {
+        setIsGeneratingFix(false)
+      }
+    })()
+  }
+
+  const fetchNoteFeedback = async () => {
+    if (isLoadingFeedback) return
+    setHasRequestedFeedback(true)
+    setIsLoadingFeedback(true)
+    setFeedbackError('')
+    try {
+      const contentText = (editor?.getText() ?? '')
+        .replace(/\u00a0/g, ' ')
+        .trim()
+        .slice(0, 20_000)
+      if (!contentText) {
+        setFeedbackError('Add a bit more content to your note so I can critique it.')
+        setTrackedIssues([])
+        trackedIssuesRef.current = []
+        setAnnotationPins([])
+        return
+      }
+
+      const resp = await fetch('/api/note_feedback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          noteId: note.id,
+          title: title,
+          contentText,
+        }),
+      })
+
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        throw new Error(`Feedback request failed: ${resp.status} ${resp.statusText} ${body}`)
+      }
+
+      const data = (await resp.json()) as NoteFeedbackResponse
+      const items = Array.isArray(data.items) ? data.items : []
+      // Start tracking issues for persistent highlights + right-side annotations.
+      const nextIssues = items.map((it) => ({ ...it, localId: makeIssueId(it), resolved: false }))
+      setTrackedIssues(nextIssues)
+      trackedIssuesRef.current = nextIssues
+      window.requestAnimationFrame(() => computeAnnotationPins())
+      flashFeedbackAction(items.length ? `Found ${items.length} issue${items.length === 1 ? '' : 's'}` : 'No issues found')
+    } catch (e) {
+      setFeedbackError(e instanceof Error ? e.message : 'Failed to fetch feedback')
+      setTrackedIssues([])
+      trackedIssuesRef.current = []
+      setAnnotationPins([])
+    } finally {
+      setIsLoadingFeedback(false)
+    }
+  }
+
+  const reconcileIssues = () => {
+    if (!editor) return
+    const current = trackedIssuesRef.current
+    if (!current.length) return
+    const next = current.map((it) => {
+      if (it.resolved) return it
+      const found = findQuoteRangeInDoc(editor.state.doc, it.quote)
+      return found ? it : { ...it, resolved: true }
+    })
+    // Only update state if something changed.
+    const changed = next.some((n, i) => n.resolved !== current[i]?.resolved)
+    if (changed) setTrackedIssues(next)
+  }
+
+  const computeAnnotationPins = () => {
+    if (!editor) return
+    const wrap = editorWrapRef.current
+    const sc = editorScrollRef.current
+    if (!wrap || !sc) return
+
+    const wrapOffsetTop = wrap.offsetTop
+    const scRect = sc.getBoundingClientRect()
+    const active = trackedIssuesRef.current.filter((x) => !x.resolved)
+
+    const pins: Array<{ localId: string; top: number; issue: TrackedIssue }> = []
+    for (const it of active) {
+      const range = findQuoteRangeInDoc(editor.state.doc, it.quote)
+      if (!range) continue
+      const coords = editor.view.coordsAtPos(range.from)
+      const topInScroll = coords.top - scRect.top + sc.scrollTop
+      const top = Math.max(0, topInScroll - wrapOffsetTop)
+      pins.push({ localId: it.localId, top, issue: it })
+    }
+
+    // Collision avoidance: use measured card heights when available.
+    pins.sort((a, b) => a.top - b.top)
+    const minGap = 12
+    for (let i = 1; i < pins.length; i++) {
+      const prev = pins[i - 1]
+      const prevH = annotationHeightsRef.current[prev.localId] ?? 160
+      const minTop = prev.top + prevH + minGap
+      if (pins[i].top < minTop) pins[i].top = minTop
+    }
+
+    setAnnotationPins(pins)
+  }
+
+  useEffect(() => {
+    if (!editor) return
+    const onTxn = () => {
+      reconcileIssues()
+      computeAnnotationPins()
+    }
+    editor.on('transaction', onTxn)
+    return () => {
+      editor.off('transaction', onTxn)
+    }
+  }, [editor])
+
+  useEffect(() => {
+    const sc = editorScrollRef.current
+    if (!sc) return
+    const onScroll = () => computeAnnotationPins()
+    sc.addEventListener('scroll', onScroll, { passive: true })
+    return () => sc.removeEventListener('scroll', onScroll)
+  }, [editor])
+
+  // After pins render (and whenever the fix editor opens), measure real card heights and reflow.
+  useEffect(() => {
+    if (!hasRequestedFeedback) return
+    const raf = window.requestAnimationFrame(() => {
+      const next: Record<string, number> = { ...annotationHeightsRef.current }
+      let changed = false
+      for (const p of annotationPins) {
+        const el = annotationCardRefs.current[p.localId]
+        if (!el) continue
+        const h = Math.max(72, Math.round(el.getBoundingClientRect().height))
+        if (next[p.localId] !== h) {
+          next[p.localId] = h
+          changed = true
+        }
+      }
+      if (changed) {
+        annotationHeightsRef.current = next
+        computeAnnotationPins()
+      }
+    })
+    return () => window.cancelAnimationFrame(raf)
+  }, [annotationPins.length, hasRequestedFeedback, activeFixId])
+
+  // Auto-highlight (jump to) the first annotation when feedback appears.
+  useEffect(() => {
+    if (!hasRequestedFeedback) return
+    if (activeAnnotationId) return
+    const first = annotationPins[0]
+    if (!first) return
+    setActiveAnnotationId(first.localId)
+    // Defer until DOM selection is possible.
+    window.requestAnimationFrame(() => {
+      highlightQuoteInEditorDom(first.issue.quote)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotationPins, hasRequestedFeedback])
 
   const handleRecordingToggle = () => {
     if (isRecording) {
@@ -604,10 +1206,153 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
         </button>
         </div>
       </div>
-      <div className="editor-content">
-        <div className="wysiwyg-editor-container">
-          <EditorContent editor={editor} />
-        </div>
+      <div className="editor-content" ref={editorScrollRef}>
+        {(() => {
+          const unresolvedCount = trackedIssues.filter((x) => !x.resolved).length
+          const showAnnotations = hasRequestedFeedback && (isLoadingFeedback || !!feedbackError || unresolvedCount > 0 || activeFixId !== null)
+          if (!showAnnotations) {
+            return (
+              <div className="wysiwyg-editor-container">
+                <EditorContent editor={editor} />
+              </div>
+            )
+          }
+
+          return (
+          <div className="editor-with-annotations" ref={editorWrapRef}>
+            <div className="wysiwyg-editor-container">
+              <EditorContent editor={editor} />
+            </div>
+
+            <div className="note-annotations" aria-label="Note feedback annotations">
+              {feedbackActionMsg ? (
+                <div className="note-annotations-toast" role="status" aria-live="polite">
+                  {feedbackActionMsg}
+                </div>
+              ) : null}
+
+              {feedbackError ? <div className="note-annotations-error">{feedbackError}</div> : null}
+
+              {annotationPins.map((p) => (
+                <div
+                  key={p.localId}
+                  ref={(el) => {
+                    annotationCardRefs.current[p.localId] = el
+                  }}
+                  className={`note-annotation note-annotation--${p.issue.kind}${
+                    activeAnnotationId === p.localId ? ' note-annotation--active' : ''
+                  }`}
+                  style={{ top: `${p.top}px` }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Note feedback annotation"
+                  onClick={() => {
+                    setActiveAnnotationId(p.localId)
+                    const ok = highlightQuoteInEditorDom(p.issue.quote)
+                    if (!ok) setFeedbackError('Could not find that quoted text in the editor (it may have changed).')
+                    else setFeedbackError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setActiveAnnotationId(p.localId)
+                      const ok = highlightQuoteInEditorDom(p.issue.quote)
+                      if (!ok) setFeedbackError('Could not find that quoted text in the editor (it may have changed).')
+                      else setFeedbackError('')
+                    }
+                  }}
+                >
+                  <div className="note-annotation-title">
+                    {p.issue.kind === 'missing'
+                      ? 'Missing info'
+                      : p.issue.kind === 'inaccurate'
+                        ? 'Might be inaccurate'
+                        : 'Needs specificity'}
+                  </div>
+                  <div className="note-annotation-quote">“{p.issue.quote}”</div>
+                  <div className="note-annotation-issue">{p.issue.issue}</div>
+                  <div className="note-annotation-suggestion">
+                    <div className="note-annotation-suggestion-label">Suggested fix</div>
+                    <div className="note-annotation-suggestion-text">{p.issue.suggestion}</div>
+                  </div>
+
+                  {activeFixId === p.localId ? (
+                    <div className="note-annotation-fixbox">
+                      {isGeneratingFix ? (
+                        <div className="note-annotation-fixbox-loading" role="status" aria-live="polite">
+                          Generating fix…
+                        </div>
+                      ) : null}
+                      <label className="note-annotation-fixbox-label">
+                        Apply mode
+                        <select
+                          className="note-annotation-fixbox-select"
+                          value={fixDraftMode}
+                          onChange={(e) => setFixDraftMode(e.target.value as 'insert' | 'replace')}
+                          disabled={isGeneratingFix}
+                        >
+                          <option value="insert">Insert after highlight</option>
+                          <option value="replace">Replace highlighted text</option>
+                        </select>
+                      </label>
+                      <label className="note-annotation-fixbox-label">
+                        Fix text
+                        <textarea
+                          className="note-annotation-fixbox-textarea"
+                          value={fixDraftText}
+                          onChange={(e) => setFixDraftText(e.target.value)}
+                          rows={4}
+                          disabled={isGeneratingFix}
+                        />
+                      </label>
+                      <div className="note-annotation-actions">
+                        <button
+                          type="button"
+                          className="note-annotation-action primary"
+                          onClick={() => {
+                            commitFeedbackFix(p.issue, fixDraftText, fixDraftMode)
+                            setActiveFixId(null)
+                            resolveTrackedIssue(p.localId)
+                          }}
+                          title="Apply this change to the note (undo with Cmd+Z)"
+                          disabled={isGeneratingFix || !fixDraftText.trim()}
+                        >
+                          Apply to note
+                        </button>
+                        <button
+                          type="button"
+                          className="note-annotation-action secondary"
+                          onClick={() => setActiveFixId(null)}
+                          disabled={isGeneratingFix}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="note-annotation-actions">
+                    <button type="button" className="note-annotation-action primary" onClick={() => openFixReview(p.issue)}>
+                      Generate fix
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          )
+        })()}
+
+        <button
+          type="button"
+          className="note-feedback-fab"
+          onClick={() => void fetchNoteFeedback()}
+          disabled={!canFormat || isLoadingFeedback}
+          title="Get feedback on this note"
+          aria-label="Get feedback on this note"
+        >
+          {isLoadingFeedback ? 'Checking…' : 'Note feedback'}
+        </button>
 
         {isLinkModalOpen ? (
           <div
@@ -754,6 +1499,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
             )}
           </div>
         ) : null}
+
       </div>
     </div>
   )

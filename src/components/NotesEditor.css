@@ -4,6 +4,7 @@
   flex-direction: column;
   height: 100vh;
   background-color: white;
+  position: relative;
 }
 
 .editor-header {
@@ -201,6 +202,275 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  position: relative;
+}
+
+.editor-with-annotations {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  position: relative;
+}
+
+.note-annotations {
+  flex: 0 0 320px;
+  width: 320px;
+  position: relative;
+  min-height: 360px;
+}
+
+.note-annotations-toast {
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.1);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  color: #0f766e;
+  font-weight: 800;
+  margin-bottom: 0.75rem;
+}
+
+.note-annotations-error {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  color: #7f1d1d;
+  margin-bottom: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.note-annotations-empty {
+  border: 1px dashed #e5e7eb;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  color: #6b7280;
+}
+
+.note-annotation {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  outline: none;
+}
+
+.note-annotation:focus-visible {
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.18), 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.note-annotation--active {
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14), 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+.note-annotation--missing {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.note-annotation--inaccurate {
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.note-annotation--specificity {
+  border-color: rgba(59, 130, 246, 0.45);
+}
+
+.note-annotation-title {
+  font-weight: 900;
+  color: #111827;
+  margin-bottom: 0.35rem;
+}
+
+.note-annotation-quote {
+  font-weight: 800;
+  color: #374151;
+  background: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.note-annotation-issue {
+  color: #111827;
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+}
+
+.note-annotation-suggestion {
+  margin-bottom: 0.7rem;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 0.6rem;
+}
+
+.note-annotation-suggestion-label {
+  font-weight: 900;
+  color: #374151;
+  font-size: 0.9rem;
+  margin-bottom: 0.35rem;
+}
+
+.note-annotation-suggestion-text {
+  color: #111827;
+  background: #fafafa;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0.6rem 0.7rem;
+  white-space: pre-wrap;
+}
+
+.note-annotation-fixbox {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.note-annotation-fixbox-loading {
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  color: #374151;
+  font-weight: 800;
+  margin-bottom: 0.65rem;
+}
+
+.note-annotation-fixbox-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: #374151;
+  margin-bottom: 0.6rem;
+  font-weight: 800;
+}
+
+.note-annotation-fixbox-select {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: #f9fafb;
+  color: #111827;
+  outline: none;
+}
+
+.note-annotation-fixbox-select:focus {
+  border-color: rgba(20, 184, 166, 0.6);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
+}
+
+.note-annotation-fixbox-textarea {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: #f9fafb;
+  color: #111827;
+  outline: none;
+  resize: vertical;
+  min-height: 84px;
+}
+
+.note-annotation-fixbox-textarea:focus {
+  border-color: rgba(20, 184, 166, 0.6);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
+}
+
+.note-annotation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.note-annotation-action {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.note-annotation-action.primary {
+  background: var(--teal);
+  color: white;
+}
+
+.note-annotation-action.primary:hover {
+  background: var(--teal-dark);
+}
+
+.note-annotation-action.secondary {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #e5e7eb;
+}
+
+.note-annotation-action.secondary:hover {
+  background: #e5e7eb;
+}
+
+.note-annotation-action.subtle {
+  background: transparent;
+  color: #6b7280;
+  border-color: #e5e7eb;
+}
+
+.note-annotation-action.subtle:hover {
+  background: #f9fafb;
+}
+
+.note-feedback-highlight {
+  border-radius: 6px;
+  padding: 0.05em 0.08em;
+}
+
+.note-feedback-highlight--missing {
+  background: rgba(239, 68, 68, 0.18);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+}
+
+.note-feedback-highlight--inaccurate {
+  background: rgba(239, 68, 68, 0.18);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+}
+
+.note-feedback-highlight--specificity {
+  background: rgba(239, 68, 68, 0.18);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+}
+
+.note-feedback-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 60;
+  border: 1px solid rgba(20, 184, 166, 0.45);
+  background: rgba(20, 184, 166, 0.12);
+  color: #0f172a;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(8px);
+}
+
+.note-feedback-fab:hover:enabled {
+  background: rgba(20, 184, 166, 0.18);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12);
+}
+
+.note-feedback-fab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .wysiwyg-editor-container {
@@ -448,7 +718,28 @@
     padding: 1.5rem;
   }
 
+  .editor-with-annotations {
+    flex-direction: column;
+  }
+
+  .note-annotations {
+    width: 100%;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .note-annotation {
+    position: relative;
+    top: auto !important;
+    margin-bottom: 0.75rem;
+  }
+
   .note-title-input {
     font-size: 1.5rem;
+  }
+
+  .note-feedback-fab {
+    right: 16px;
+    bottom: 16px;
   }
 }

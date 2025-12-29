@@ -33,9 +33,15 @@ function createApiMiddleware() {
     const url = String(req.url || '')
     if (!url.startsWith('/api/')) return next()
 
-    // Only handle the two RAG endpoints here.
+    // Only handle the API endpoints here.
     const pathname = url.split('?')[0]
-    if (pathname !== '/api/embed' && pathname !== '/api/chat') return next()
+    if (
+      pathname !== '/api/embed' &&
+      pathname !== '/api/chat' &&
+      pathname !== '/api/note_feedback' &&
+      pathname !== '/api/note_feedback_fix'
+    )
+      return next()
 
     // Parse JSON body (Vite dev server does not do this for us).
     if (req.method === 'POST') {
@@ -57,6 +63,14 @@ function createApiMiddleware() {
       }
       if (pathname === '/api/chat') {
         const mod = await import('./api/chat')
+        return await mod.default(req, res)
+      }
+      if (pathname === '/api/note_feedback') {
+        const mod = await import('./api/note_feedback')
+        return await mod.default(req, res)
+      }
+      if (pathname === '/api/note_feedback_fix') {
+        const mod = await import('./api/note_feedback_fix')
         return await mod.default(req, res)
       }
       return next()

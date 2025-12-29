@@ -5,3 +5,40 @@ export interface Note {
   date: string
 }
 
+export type NoteFeedbackKind = 'missing' | 'inaccurate' | 'specificity'
+
+export type NoteFeedbackSource = {
+  title: string
+  url: string
+}
+
+export type NoteFeedbackItem = {
+  kind: NoteFeedbackKind
+  quote: string
+  issue: string
+  suggestion: string
+  confidence: 'low' | 'medium' | 'high'
+  sources: NoteFeedbackSource[]
+}
+
+export type NoteFeedbackResponse = {
+  items: NoteFeedbackItem[]
+  provider: string
+  model: string
+}
+
+export type NoteFeedbackFixMode = 'insert' | 'replace'
+
+export type NoteFeedbackFixResponse = {
+  mode: NoteFeedbackFixMode
+  fixText: string
+  provider: string
+  model: string
+}
+
+export type NoteFeedbackFixContext = {
+  containerType?: string
+  listType?: 'bulletList' | 'orderedList'
+  blockText?: string
+}
+
