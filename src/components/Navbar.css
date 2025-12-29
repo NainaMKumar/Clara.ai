@@ -6,7 +6,7 @@
   top: 0;
   z-index: 1000;
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(20, 184, 166, 0.1);
+  border-bottom: 2px solid rgba(20, 184, 166, 0.1);
 }
 
 .navbar-container {
@@ -18,14 +18,14 @@
 }
 
 .logo {
-  font-size: 1.4rem;
+  font-size: 2.0rem;
   font-weight: bold;
-  color: var(--text-dark);
+  color: var(--teal);
   text-decoration: none;
 }
-.logo:hover{
+/* .logo:hover{
   color: var(--teal);
-}
+} */
 
 
 .nav-links {
@@ -39,7 +39,7 @@
   color: var(--text-dark);
   text-decoration: none;
   transition: color 0.3s;
-  font-size: 0.95rem;
+  font-size: 1.25rem;
 }
 
 .nav-links a:hover {

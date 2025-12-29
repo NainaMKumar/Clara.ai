@@ -13,7 +13,7 @@
 }
 
 body {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Inter', 'sans-serif';
   background-color: var(--white);
   color: var(--text-dark);
   line-height: 1.6;

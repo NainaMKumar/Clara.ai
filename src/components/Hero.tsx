@@ -1,13 +1,33 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import DemoVisual from './DemoVisual'
 import './Hero.css'
 
 const Hero: React.FC = () => {
+  const [displayedText, setDisplayedText] = useState('')
+  const [showCursor, setShowCursor] = useState(true)
+  const fullText = 'AI That Writes With You'
+
+  useEffect(() => {
+    let currentIndex = 0
+    const typingInterval = setInterval(() => {
+      if (currentIndex <= fullText.length) {
+        setDisplayedText(fullText.slice(0, currentIndex))
+        currentIndex++
+      } else {
+        clearInterval(typingInterval)
+        setShowCursor(false)
+      }
+    }, 100) // Adjust speed here (milliseconds per character)
+
+    return () => clearInterval(typingInterval)
+  }, [])
+
   return (
     <section className="hero">
       <div className="hero-content">
         <h1>
-          AI That Writes <span className="highlight"> With You.</span>
+          <span className="typed-text">{displayedText}</span>
+          {showCursor && <span className="cursor">|</span>}
         </h1>
         <p>
           Clara is a real time, collaborative AI for notetaking. 

@@ -22,7 +22,7 @@
   background: var(--white);
   padding: 2rem;
   border-radius: 12px;
-  border: 1px solid rgba(20, 184, 166, 0.2);
+  border: 2px solid rgba(20, 184, 165, 0.234);
   transition: all 0.3s ease;
 }
 
@@ -40,12 +40,12 @@
 }
 
 .feature-card h3 {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   margin-bottom: 1rem;
   color: var(--teal);
 }
 
 .feature-card p {
   color: var(--text-light);
-  font-size: 0.95rem;
+  font-size: 1.25rem;
 }

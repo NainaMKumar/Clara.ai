@@ -1,0 +1,53 @@
+.founder-content {
+    text-align: center;
+}
+
+.uiuc {
+    font-size: 1.25rem;
+    margin-bottom: 2rem;
+}
+
+.founders-container {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+    align-items: stretch;
+}
+
+.founder-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: 500px;
+}
+
+.profile-photo {
+    border-radius: 200px;
+    width: 300px;
+    height: 320px;
+    margin-bottom: 1.5rem;
+    object-fit: cover;
+}
+
+.founder-major {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-light);
+    margin-bottom: 1.5rem;
+}
+
+.founder-why {
+    font-size: 1.2rem;
+    color: var(--text-light);
+    background-color: rgba(20, 184, 166, 0.05);
+    padding: 2rem;
+    border-radius: 12px;
+    border: 1px solid rgba(20, 184, 166, 0.2);
+    text-align: left;
+    line-height: 1.6;
+    flex: 1;
+    display: flex;
+    align-items: center;
+}
