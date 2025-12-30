@@ -291,27 +291,6 @@ function createGhostTextExtension(
           props: {
             decorations(state) {
               const suggestion = suggestionRef.current;
-              // #region agent log
-              fetch(
-                'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    location: 'NotesEditor.tsx:decorations',
-                    message: 'Decoration function called',
-                    data: {
-                      suggestion,
-                      hasValue: !!suggestion,
-                      selectionTo: state.selection.to,
-                    },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    hypothesisId: 'D',
-                  }),
-                }
-              ).catch(() => {});
-              // #endregion
               // Only show ghost text if we have a suggestion and (in autocomplete mode or suggestion mode)
               // Actually, user wants it for both.
               if (!suggestion) return DecorationSet.empty;
@@ -326,23 +305,6 @@ function createGhostTextExtension(
                   const span = document.createElement('span');
                   span.textContent = suggestion;
                   span.className = 'ghost-text';
-                  // #region agent log
-                  fetch(
-                    'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
-                    {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        location: 'NotesEditor.tsx:widget-factory',
-                        message: 'Creating ghost span',
-                        data: { textContent: suggestion },
-                        timestamp: Date.now(),
-                        sessionId: 'debug-session',
-                        hypothesisId: 'D',
-                      }),
-                    }
-                  ).catch(() => {});
-                  // #endregion
                   return span;
                 },
                 { side: 1 }
@@ -473,6 +435,12 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const deepgramSocketRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  // Ref to track accumulated final transcripts (avoids stale closure issues)
+  const accumulatedTranscriptRef = useRef<string>('');
+  // Track the latest audio timestamp from Deepgram (for filtering old buffered results)
+  const latestAudioTimeRef = useRef<number>(0);
+  // Cutoff time: ignore any results with start time before this (set when user types)
+  const audioCutoffTimeRef = useRef<number>(0);
   // Default to "autocomplete" so users immediately see speech appear in the note as a transcript.
   const [mode, setMode] = useState<'autocomplete' | 'suggestion'>(
     'autocomplete'
@@ -482,20 +450,6 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
   // Sync refs for extensions/callbacks
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'NotesEditor.tsx:syncRef',
-        message: 'Syncing suggestionRef',
-        data: { oldValue: suggestionRef.current, newValue: suggestion },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'C',
-      }),
-    }).catch(() => {});
-    // #endregion
     suggestionRef.current = suggestion;
   }, [suggestion]);
   useEffect(() => {
@@ -598,6 +552,11 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
             // Accept the suggestion at the current cursor position.
             editor?.chain().focus().insertContent(suggestionRef.current).run();
             setSuggestion('');
+            // Reset accumulated transcript - user has "consumed" this text
+            // Also set cutoff to ignore any buffered old results
+            accumulatedTranscriptRef.current = '';
+            audioCutoffTimeRef.current = latestAudioTimeRef.current;
+            setTranscript('');
             return true;
           }
           if (event.key === 'Escape' && isLinkModalOpen) {
@@ -642,6 +601,17 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       onUpdate: ({ editor }: any) => {
         const html = editor.getHTML();
         onUpdate({ content: html });
+        // When user types, reset accumulated transcript - they've "caught up" to this point
+        // Also set the audio cutoff time to ignore any buffered old results still coming through
+        if (
+          accumulatedTranscriptRef.current ||
+          latestAudioTimeRef.current > 0
+        ) {
+          accumulatedTranscriptRef.current = '';
+          // Set cutoff to latest audio time - ignore any results from before this point
+          audioCutoffTimeRef.current = latestAudioTimeRef.current;
+          setTranscript('');
+        }
         if (suggestion) setSuggestion('');
       },
     },
@@ -654,44 +624,9 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   // by a ref (not document state), we force a no-op transaction whenever the
   // suggestion changes so the decoration re-renders immediately.
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'NotesEditor.tsx:useEffect-dispatch',
-        message: 'useEffect for dispatch triggered',
-        data: {
-          hasEditor: !!editor,
-          suggestionRefCurrent: suggestionRef.current,
-          suggestionState: suggestion,
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'C',
-      }),
-    }).catch(() => {});
-    // #endregion
     if (!editor) return;
     if (!suggestionRef.current) return;
     try {
-      // #region agent log
-      fetch(
-        'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'NotesEditor.tsx:dispatch',
-            message: 'Dispatching transaction',
-            data: { suggestionRefCurrent: suggestionRef.current },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            hypothesisId: 'C',
-          }),
-        }
-      ).catch(() => {});
-      // #endregion
       editor.view.dispatch(editor.state.tr);
     } catch {
       // ignore
@@ -1343,28 +1278,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     }
 
     mediaStreamRef.current = stream;
-    // #region agent log
     const audioTrack = stream.getAudioTracks()[0];
-    fetch('http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'NotesEditor.tsx:stream-acquired',
-        message: 'Audio stream acquired',
-        data: {
-          streamActive: stream.active,
-          trackCount: stream.getAudioTracks().length,
-          trackEnabled: audioTrack?.enabled,
-          trackMuted: audioTrack?.muted,
-          trackLabel: audioTrack?.label,
-          trackReadyState: audioTrack?.readyState,
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'H',
-      }),
-    }).catch(() => {});
-    // #endregion
 
     // Warn if the audio track is muted or looks like a virtual device
     if (audioTrack?.muted) {
@@ -1380,14 +1294,49 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     // Show immediate UI feedback that we are attempting to record.
     setIsRecording(true);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'NotesEditor.tsx:websocket-connect',
+        message: 'Creating Deepgram WebSocket connection',
+        data: { timestamp: Date.now() },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'B1',
+      }),
+    }).catch(() => {});
+    // #endregion
     const socket = new WebSocket(
-      // Parameters tuned for MediaRecorder (auto-detect format)
-      'wss://api.deepgram.com/v1/listen?punctuate=true&smart_format=true',
+      // Parameters tuned for real-time transcription:
+      // - interim_results=true: Get partial transcripts immediately as you speak (fixes speed)
+      // - model=nova-3: Deepgram's most accurate speech model (fixes accuracy)
+      // - punctuate=true: Add punctuation to transcript
+      // - smart_format=true: Format numbers, dates, etc.
+      'wss://api.deepgram.com/v1/listen?model=nova-3&language=en&punctuate=true&smart_format=true&interim_results=true',
       ['token', DEEPGRAM_API_KEY]
     );
     deepgramSocketRef.current = socket;
 
-    socket.onerror = () => {
+    socket.onerror = (err) => {
+      // #region agent log
+      fetch(
+        'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'NotesEditor.tsx:socket-onerror',
+            message: 'WebSocket error occurred',
+            data: { error: String(err), timestamp: Date.now() },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'ERR',
+          }),
+        }
+      ).catch(() => {});
+      // #endregion
       setRecordingError(
         'Deepgram connection error. Check your API key and network.'
       );
@@ -1395,6 +1344,82 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     };
 
     socket.onclose = (ev) => {
+      // #region agent log
+      fetch(
+        'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'NotesEditor.tsx:socket-onclose',
+            message: 'WebSocket closed',
+            data: {
+              code: ev.code,
+              reason: ev.reason,
+              wasClean: ev.wasClean,
+              timestamp: Date.now(),
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'ERR',
+          }),
+        }
+      ).catch(() => {});
+      // #endregion
+
+      // If socket closed unexpectedly while recording, auto-reconnect
+      if (isRecording && ev.code !== 1000) {
+        // #region agent log
+        fetch(
+          'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'NotesEditor.tsx:socket-reconnect',
+              message: 'Auto-reconnecting Deepgram socket',
+              data: { timestamp: Date.now() },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              hypothesisId: 'RECONNECT',
+            }),
+          }
+        ).catch(() => {});
+        // #endregion
+
+        // Create a new socket and update the ref
+        const newSocket = new WebSocket(
+          'wss://api.deepgram.com/v1/listen?model=nova-3&language=en&punctuate=true&smart_format=true&interim_results=true',
+          ['token', DEEPGRAM_API_KEY]
+        );
+        deepgramSocketRef.current = newSocket;
+
+        // Re-attach the same handlers to the new socket
+        newSocket.onerror = socket.onerror;
+        newSocket.onclose = socket.onclose;
+        newSocket.onopen = () => {
+          // #region agent log
+          fetch(
+            'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'NotesEditor.tsx:socket-reconnected',
+                message: 'Deepgram socket reconnected successfully',
+                data: { timestamp: Date.now() },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                hypothesisId: 'RECONNECT',
+              }),
+            }
+          ).catch(() => {});
+          // #endregion
+        };
+        newSocket.onmessage = socket.onmessage;
+        return;
+      }
+
       // If we didn't explicitly stop, surface a reason.
       if (isRecording) {
         const msg =
@@ -1407,10 +1432,31 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     };
 
     socket.onopen = () => {
+      // #region agent log
+      fetch(
+        'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'NotesEditor.tsx:socket-onopen',
+            message: 'WebSocket opened successfully',
+            data: { timestamp: Date.now() },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'B1',
+          }),
+        }
+      ).catch(() => {});
+      // #endregion
       setIsConnecting(false);
       setIsRecording(true);
       setTranscript('');
       setSuggestion('');
+      // Reset all transcript tracking for new session
+      accumulatedTranscriptRef.current = '';
+      latestAudioTimeRef.current = 0;
+      audioCutoffTimeRef.current = 0;
 
       let mediaRecorder: MediaRecorder;
       try {
@@ -1421,63 +1467,64 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       }
 
       mediaRecorderRef.current = mediaRecorder;
-      // #region agent log
-      fetch(
-        'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'NotesEditor.tsx:mediaRecorder-setup',
-            message: 'MediaRecorder created',
-            data: {
-              mimeType: mediaRecorder.mimeType,
-              state: mediaRecorder.state,
-              streamActive: stream.active,
-              audioTracks: stream.getAudioTracks().length,
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            hypothesisId: 'F',
-          }),
-        }
-      ).catch(() => {});
-      // #endregion
 
       mediaRecorder.ondataavailable = (event) => {
+        // Use the ref so we send to the current socket (supports reconnection)
+        const currentSocket = deepgramSocketRef.current;
         // #region agent log
         fetch(
-          'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
+          'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               location: 'NotesEditor.tsx:ondataavailable',
-              message: 'Audio chunk',
+              message: 'Audio chunk available',
               data: {
                 dataSize: event.data.size,
-                dataType: event.data.type,
-                socketReady: socket.readyState === WebSocket.OPEN,
+                socketReadyState: currentSocket?.readyState,
+                socketOpen: currentSocket?.readyState === WebSocket.OPEN,
               },
               timestamp: Date.now(),
               sessionId: 'debug-session',
-              hypothesisId: 'F',
+              hypothesisId: 'AUDIO',
             }),
           }
         ).catch(() => {});
         // #endregion
         try {
-          if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-            socket.send(event.data);
+          if (
+            event.data.size > 0 &&
+            currentSocket?.readyState === WebSocket.OPEN
+          ) {
+            currentSocket.send(event.data);
           }
         } catch {
           // ignore
         }
       };
-      mediaRecorder.start(250); // Send data in 250ms chunks
+      mediaRecorder.start(100); // Send data in 100ms chunks for lower latency
 
       // receive transcription results
       socket.onmessage = (message) => {
+        // #region agent log
+        const msgReceivedTime = Date.now();
+        fetch(
+          'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'NotesEditor.tsx:onmessage-timing',
+              message: 'Deepgram message received',
+              data: { msgReceivedTime },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              hypothesisId: 'B1',
+            }),
+          }
+        ).catch(() => {});
+        // #endregion
         try {
           const data = JSON.parse(message.data);
           // Surface Deepgram error payloads (otherwise it just looks like "no transcript").
@@ -1494,7 +1541,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           }
           // #region agent log
           fetch(
-            'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
+            'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -1503,6 +1550,11 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                 message: 'Raw Deepgram data',
                 data: {
                   hasChannel: !!data.channel,
+                  isFinal: data.is_final,
+                  speechFinal: data.speech_final,
+                  type: data.type,
+                  start: data.start,
+                  duration: data.duration,
                   channelKeys: data.channel ? Object.keys(data.channel) : [],
                   alternatives: data.channel?.alternatives,
                   firstAlt: data.channel?.alternatives?.[0],
@@ -1510,7 +1562,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                 },
                 timestamp: Date.now(),
                 sessionId: 'debug-session',
-                hypothesisId: 'A2',
+                hypothesisId: 'A1-B1',
               }),
             }
           ).catch(() => {});
@@ -1518,73 +1570,143 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           const transcriptText = String(
             data.channel?.alternatives?.[0]?.transcript ?? ''
           ).trim();
+          const isFinal = data.is_final === true;
+          const speechFinal = data.speech_final === true;
+          const confidence = data.channel?.alternatives?.[0]?.confidence ?? 0;
+          const audioStart = typeof data.start === 'number' ? data.start : 0;
+          const audioDuration =
+            typeof data.duration === 'number' ? data.duration : 0;
+
+          // Track the latest audio time for cutoff calculations
+          const audioEndTime = audioStart + audioDuration;
+          if (audioEndTime > latestAudioTimeRef.current) {
+            latestAudioTimeRef.current = audioEndTime;
+          }
+
+          // Filter out old buffered results (from before the user last typed)
+          if (audioStart < audioCutoffTimeRef.current) {
+            // This result is for audio from before the cutoff - ignore it
+            return;
+          }
+
           // #region agent log
           fetch(
-            'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
+            'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
             {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 location: 'NotesEditor.tsx:onmessage',
                 message: 'Deepgram transcript received',
-                data: { transcriptText, isEmpty: !transcriptText },
+                data: {
+                  transcriptText,
+                  isEmpty: !transcriptText,
+                  isFinal,
+                  speechFinal,
+                  confidence,
+                  accumulatedSoFar: accumulatedTranscriptRef.current,
+                },
                 timestamp: Date.now(),
                 sessionId: 'debug-session',
-                hypothesisId: 'A',
+                hypothesisId: 'A1-B1',
               }),
             }
           ).catch(() => {});
           // #endregion
           if (!transcriptText) return;
 
-          setTranscript((prev) => {
-            const next = prev ? `${prev} ${transcriptText}` : transcriptText;
+          // Use ref for accumulation to avoid stale closure issues with React state.
+          // - is_final results: Append to accumulated ref (fires frequently during speech)
+          // - Interim results: Show (accumulated + current interim) only if confidence is high enough
+
+          // Minimum confidence threshold to filter out absurd low-confidence interim guesses
+          const CONFIDENCE_THRESHOLD = 0.75;
+
+          if (isFinal) {
+            // Final result: append to accumulated ref
+            // Using is_final (not just speech_final) keeps accumulation current during continuous speech
+            const newAccumulated = accumulatedTranscriptRef.current
+              ? `${accumulatedTranscriptRef.current} ${transcriptText}`
+              : transcriptText;
+            accumulatedTranscriptRef.current = newAccumulated;
+
             // #region agent log
             fetch(
-              'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
+              'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  location: 'NotesEditor.tsx:setTranscript',
-                  message: 'setTranscript callback',
-                  data: { modeRefCurrent: modeRef.current, next },
+                  location: 'NotesEditor.tsx:isFinal-accumulated',
+                  message: 'Final transcript - accumulated via ref',
+                  data: {
+                    modeRefCurrent: modeRef.current,
+                    newText: transcriptText,
+                    newAccumulated,
+                    accumulatedLength: newAccumulated.length,
+                    confidence,
+                    speechFinal,
+                  },
                   timestamp: Date.now(),
                   sessionId: 'debug-session',
-                  hypothesisId: 'B',
+                  hypothesisId: 'ACCUM',
                 }),
               }
             ).catch(() => {});
             // #endregion
+
+            // Update React state for other consumers
+            setTranscript(newAccumulated);
+
             if (modeRef.current === 'autocomplete') {
-              // Match old behavior where transcript showed up immediately while recording
-              // by ensuring the editor is focused (without inserting into the doc).
               try {
                 editor?.chain().focus().run();
               } catch {
                 // ignore
               }
+              setSuggestion(newAccumulated);
+            }
+          } else if (confidence >= CONFIDENCE_THRESHOLD) {
+            // Interim result with good confidence: show as ghost text for real-time feedback
+            if (modeRef.current === 'autocomplete') {
+              const combined = accumulatedTranscriptRef.current
+                ? `${accumulatedTranscriptRef.current} ${transcriptText}`
+                : transcriptText;
+
               // #region agent log
               fetch(
-                'http://127.0.0.1:7243/ingest/3241d929-b830-4c0a-9e58-e7586b9615dc',
+                'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    location: 'NotesEditor.tsx:setSuggestion',
-                    message: 'Calling setSuggestion',
-                    data: { next },
+                    location: 'NotesEditor.tsx:interim-combined',
+                    message:
+                      'Interim transcript - showing accumulated + current (high confidence)',
+                    data: {
+                      accumulated: accumulatedTranscriptRef.current,
+                      interim: transcriptText,
+                      combined,
+                      combinedLength: combined.length,
+                      confidence,
+                    },
                     timestamp: Date.now(),
                     sessionId: 'debug-session',
-                    hypothesisId: 'B',
+                    hypothesisId: 'ACCUM',
                   }),
                 }
               ).catch(() => {});
               // #endregion
-              setSuggestion(next);
+
+              try {
+                editor?.chain().focus().run();
+              } catch {
+                // ignore
+              }
+              setSuggestion(combined);
             }
-            return next;
-          });
+          }
+          // Low-confidence interim results are ignored to filter out absurd guesses
         } catch (e) {
           console.error('Deepgram message parse failed', e);
         }
@@ -1616,6 +1738,10 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
     setTranscript('');
     setSuggestion('');
+    // Clear all transcript tracking
+    accumulatedTranscriptRef.current = '';
+    latestAudioTimeRef.current = 0;
+    audioCutoffTimeRef.current = 0;
 
     console.log('Recording stopped...');
   };
