@@ -220,6 +220,10 @@ export function openaiProvider(): RagProviderApi {
       const parsed = tryParseJson(content);
 
       if (!parsed) {
+        console.warn(
+          'OpenAI response was not valid JSON. Raw content length:',
+          content.length
+        );
         // JSON parsing failed - try to salvage the answer text
         const extracted = extractAnswerFromMalformedJson(content);
         if (extracted) {

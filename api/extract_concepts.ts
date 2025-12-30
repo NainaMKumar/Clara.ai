@@ -126,7 +126,7 @@ export default async function handler(req: any, res: any) {
           { role: 'user', content: user },
         ],
         temperature: 0.3,
-        max_tokens: 150,
+        max_completion_tokens: 150,
         response_format: { type: 'json_object' },
       }),
     });

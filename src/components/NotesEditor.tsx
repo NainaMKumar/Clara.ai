@@ -441,6 +441,8 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const latestAudioTimeRef = useRef<number>(0);
   // Cutoff time: ignore any results with start time before this (set when user types)
   const audioCutoffTimeRef = useRef<number>(0);
+  // Track last time we received a message from Deepgram (for detecting silent death)
+  const lastDeepgramMessageTimeRef = useRef<number>(0);
   // Default to "autocomplete" so users immediately see speech appear in the note as a transcript.
   const [mode, setMode] = useState<'autocomplete' | 'suggestion'>(
     'autocomplete'
@@ -546,11 +548,102 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           autocorrect: 'off',
           spellcheck: 'false',
         },
-        handleKeyDown: (_view: any, event: any) => {
+        handleKeyDown: (view: any, event: any) => {
+          // #region agent log
+          if (event.key === 'Tab') {
+            fetch(
+              'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: 'NotesEditor.tsx:handleKeyDown-entry',
+                  message: 'Tab pressed',
+                  data: {
+                    suggestionRef: suggestionRef.current,
+                    hasText: !!suggestionRef.current?.trim(),
+                  },
+                  timestamp: Date.now(),
+                  sessionId: 'debug-session',
+                  hypothesisId: 'TAB',
+                }),
+              }
+            ).catch(() => {});
+          }
+          // #endregion
+
           if (event.key === 'Tab' && suggestionRef.current.trim()) {
             event.preventDefault();
             // Accept the suggestion at the current cursor position.
-            editor?.chain().focus().insertContent(suggestionRef.current).run();
+            const suggestionText = suggestionRef.current;
+            const { state, dispatch } = view;
+            const { to } = state.selection;
+
+            // #region agent log
+            fetch(
+              'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: 'NotesEditor.tsx:tab-handler',
+                  message: 'Tab pressed - attempting to insert suggestion',
+                  data: {
+                    suggestionText,
+                    suggestionLength: suggestionText.length,
+                    cursorPosition: to,
+                    docSize: state.doc.content.size,
+                  },
+                  timestamp: Date.now(),
+                  sessionId: 'debug-session',
+                  hypothesisId: 'TAB',
+                }),
+              }
+            ).catch(() => {});
+            // #endregion
+
+            try {
+              // Create a new transaction and insert text at cursor position
+              const tr = state.tr.insertText(suggestionText, to);
+              dispatch(tr);
+
+              // #region agent log
+              fetch(
+                'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'NotesEditor.tsx:tab-handler-success',
+                    message: 'Dispatch completed',
+                    data: { newDocSize: view.state.doc.content.size },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session',
+                    hypothesisId: 'TAB',
+                  }),
+                }
+              ).catch(() => {});
+              // #endregion
+            } catch (err) {
+              // #region agent log
+              fetch(
+                'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'NotesEditor.tsx:tab-handler-error',
+                    message: 'Dispatch failed',
+                    data: { error: String(err) },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session',
+                    hypothesisId: 'TAB',
+                  }),
+                }
+              ).catch(() => {});
+              // #endregion
+            }
+
             setSuggestion('');
             // Reset accumulated transcript - user has "consumed" this text
             // Also set cutoff to ignore any buffered old results
@@ -1160,7 +1253,28 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     // In 'suggestion' mode, clear previous suggestion to show loading state/nothing while thinking.
     // In 'autocomplete' mode, keep showing the raw transcript (ghost text) until AI improves it.
     if (mode === 'suggestion') {
-      setSuggestion('');
+      // #region agent log
+      fetch(
+        'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'NotesEditor.tsx:useEffect-transcript',
+            message: 'Transcript changed - clearing suggestion?',
+            data: {
+              transcriptShort: transcript.slice(-20),
+              mode,
+              suggestionPresent: !!suggestion,
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'UX-FLICKER',
+          }),
+        }
+      ).catch(() => {});
+      // #endregion
+      // setSuggestion(''); // <--- This causes flickering!
     }
 
     const timer = window.setTimeout(async () => {
@@ -1344,6 +1458,14 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     };
 
     socket.onclose = (ev) => {
+      // #region agent log - cleanup health check
+      if ((socket as any)._healthCheckInterval) {
+        clearInterval((socket as any)._healthCheckInterval);
+      }
+      // #endregion
+      // Check recorder state for reconnection decision (avoid stale closure)
+      const recorderActive = mediaRecorderRef.current?.state === 'recording';
+
       // #region agent log
       fetch(
         'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
@@ -1352,23 +1474,25 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             location: 'NotesEditor.tsx:socket-onclose',
-            message: 'WebSocket closed',
+            message: 'WebSocket CLOSED - transcription will stop',
             data: {
               code: ev.code,
               reason: ev.reason,
               wasClean: ev.wasClean,
+              recorderActive,
+              willReconnect: recorderActive && ev.code !== 1000,
               timestamp: Date.now(),
             },
             timestamp: Date.now(),
             sessionId: 'debug-session',
-            hypothesisId: 'ERR',
+            hypothesisId: 'H1',
           }),
         }
       ).catch(() => {});
       // #endregion
 
       // If socket closed unexpectedly while recording, auto-reconnect
-      if (isRecording && ev.code !== 1000) {
+      if (recorderActive && ev.code !== 1000) {
         // #region agent log
         fetch(
           'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
@@ -1377,11 +1501,15 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               location: 'NotesEditor.tsx:socket-reconnect',
-              message: 'Auto-reconnecting Deepgram socket',
-              data: { timestamp: Date.now() },
+              message: 'Auto-reconnecting Deepgram socket NOW',
+              data: {
+                closeCode: ev.code,
+                closeReason: ev.reason,
+                timestamp: Date.now(),
+              },
               timestamp: Date.now(),
               sessionId: 'debug-session',
-              hypothesisId: 'RECONNECT',
+              hypothesisId: 'RECONNECT-FIX',
             }),
           }
         ).catch(() => {});
@@ -1398,6 +1526,10 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
         newSocket.onerror = socket.onerror;
         newSocket.onclose = socket.onclose;
         newSocket.onopen = () => {
+          // Reset audio cutoff to allow new transcripts through after reconnect
+          audioCutoffTimeRef.current = 0;
+          lastDeepgramMessageTimeRef.current = Date.now();
+
           // #region agent log
           fetch(
             'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
@@ -1407,7 +1539,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
               body: JSON.stringify({
                 location: 'NotesEditor.tsx:socket-reconnected',
                 message: 'Deepgram socket reconnected successfully',
-                data: { timestamp: Date.now() },
+                data: { timestamp: Date.now(), audioCutoffReset: true },
                 timestamp: Date.now(),
                 sessionId: 'debug-session',
                 hypothesisId: 'RECONNECT',
@@ -1421,7 +1553,9 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       }
 
       // If we didn't explicitly stop, surface a reason.
-      if (isRecording) {
+      // Use mediaRecorderRef instead of isRecording state to avoid stale closure issue
+      const stillRecording = mediaRecorderRef.current?.state === 'recording';
+      if (stillRecording) {
         const msg =
           ev.code === 1000
             ? 'Deepgram connection closed.'
@@ -1458,6 +1592,96 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       latestAudioTimeRef.current = 0;
       audioCutoffTimeRef.current = 0;
 
+      // Initialize last message time
+      lastDeepgramMessageTimeRef.current = Date.now();
+
+      // #region agent log - periodic health check with silent death detection
+      const healthCheckInterval = setInterval(() => {
+        const currentSocket = deepgramSocketRef.current;
+        const recorder = mediaRecorderRef.current;
+        const now = Date.now();
+        const timeSinceLastMessage = now - lastDeepgramMessageTimeRef.current;
+        const SILENT_DEATH_THRESHOLD_MS = 15000; // 15 seconds without a message = silent death
+
+        fetch(
+          'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'NotesEditor.tsx:health-check',
+              message: 'Periodic recording health check',
+              data: {
+                socketReadyState: currentSocket?.readyState,
+                socketReadyStateLabel:
+                  currentSocket?.readyState === 0
+                    ? 'CONNECTING'
+                    : currentSocket?.readyState === 1
+                    ? 'OPEN'
+                    : currentSocket?.readyState === 2
+                    ? 'CLOSING'
+                    : currentSocket?.readyState === 3
+                    ? 'CLOSED'
+                    : 'NONE',
+                recorderState: recorder?.state,
+                accumulatedLength: accumulatedTranscriptRef.current.length,
+                audioCutoff: audioCutoffTimeRef.current,
+                latestAudioTime: latestAudioTimeRef.current,
+                modeRef: modeRef.current,
+                timeSinceLastMessage,
+                willReconnect: timeSinceLastMessage > SILENT_DEATH_THRESHOLD_MS,
+              },
+              timestamp: now,
+              sessionId: 'debug-session',
+              hypothesisId: 'H1-H2-H3-H4',
+            }),
+          }
+        ).catch(() => {});
+
+        // Detect silent death: socket reports OPEN but no messages received for 15+ seconds
+        if (
+          currentSocket?.readyState === WebSocket.OPEN &&
+          timeSinceLastMessage > SILENT_DEATH_THRESHOLD_MS &&
+          recorder?.state === 'recording'
+        ) {
+          // #region agent log
+          fetch(
+            'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'NotesEditor.tsx:silent-death-detected',
+                message: 'Silent death detected - forcing reconnect',
+                data: {
+                  timeSinceLastMessage,
+                  threshold: SILENT_DEATH_THRESHOLD_MS,
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                hypothesisId: 'H1-FIX',
+              }),
+            }
+          ).catch(() => {});
+          // #endregion
+
+          // Force close the dead socket to trigger reconnection
+          try {
+            currentSocket.close(4000, 'Silent death detected');
+          } catch {
+            // ignore
+          }
+        }
+
+        // Stop health check if socket is gone
+        if (!currentSocket || currentSocket.readyState !== 1) {
+          clearInterval(healthCheckInterval);
+        }
+      }, 5000); // Check every 5 seconds for faster detection
+      // Store interval ID for cleanup
+      (socket as any)._healthCheckInterval = healthCheckInterval;
+      // #endregion
+
       let mediaRecorder: MediaRecorder;
       try {
         // Prefer webm if available; Safari may throw here, so fall back.
@@ -1468,29 +1692,36 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
       mediaRecorderRef.current = mediaRecorder;
 
+      // Track audio chunk count for H2 hypothesis
+      let audioChunkCount = 0;
       mediaRecorder.ondataavailable = (event) => {
+        audioChunkCount++;
         // Use the ref so we send to the current socket (supports reconnection)
         const currentSocket = deepgramSocketRef.current;
-        // #region agent log
-        fetch(
-          'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'NotesEditor.tsx:ondataavailable',
-              message: 'Audio chunk available',
-              data: {
-                dataSize: event.data.size,
-                socketReadyState: currentSocket?.readyState,
-                socketOpen: currentSocket?.readyState === WebSocket.OPEN,
-              },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              hypothesisId: 'AUDIO',
-            }),
-          }
-        ).catch(() => {});
+        // #region agent log - log every 50th chunk to avoid spam but track activity
+        if (audioChunkCount % 50 === 1) {
+          fetch(
+            'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                location: 'NotesEditor.tsx:ondataavailable',
+                message: 'Audio chunk batch (every 50)',
+                data: {
+                  chunkNumber: audioChunkCount,
+                  dataSize: event.data.size,
+                  socketReadyState: currentSocket?.readyState,
+                  socketOpen: currentSocket?.readyState === WebSocket.OPEN,
+                  recorderState: mediaRecorder.state,
+                },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                hypothesisId: 'H2',
+              }),
+            }
+          ).catch(() => {});
+        }
         // #endregion
         try {
           if (
@@ -1507,6 +1738,9 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
       // receive transcription results
       socket.onmessage = (message) => {
+        // Update last message time for silent death detection
+        lastDeepgramMessageTimeRef.current = Date.now();
+
         // #region agent log
         const msgReceivedTime = Date.now();
         fetch(
@@ -1585,6 +1819,28 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
           // Filter out old buffered results (from before the user last typed)
           if (audioStart < audioCutoffTimeRef.current) {
+            // #region agent log
+            fetch(
+              'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: 'NotesEditor.tsx:cutoff-filter',
+                  message: 'Result FILTERED by audio cutoff',
+                  data: {
+                    audioStart,
+                    audioCutoff: audioCutoffTimeRef.current,
+                    latestAudioTime: latestAudioTimeRef.current,
+                    transcriptText,
+                  },
+                  timestamp: Date.now(),
+                  sessionId: 'debug-session',
+                  hypothesisId: 'H3',
+                }),
+              }
+            ).catch(() => {});
+            // #endregion
             // This result is for audio from before the cutoff - ignore it
             return;
           }
@@ -1668,42 +1924,46 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
             }
           } else if (confidence >= CONFIDENCE_THRESHOLD) {
             // Interim result with good confidence: show as ghost text for real-time feedback
+            const combined = accumulatedTranscriptRef.current
+              ? `${accumulatedTranscriptRef.current} ${transcriptText}`
+              : transcriptText;
+
+            // #region agent log
+            fetch(
+              'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: 'NotesEditor.tsx:interim-combined',
+                  message:
+                    'Interim transcript - showing accumulated + current (high confidence)',
+                  data: {
+                    accumulated: accumulatedTranscriptRef.current,
+                    interim: transcriptText,
+                    combined,
+                    combinedLength: combined.length,
+                    confidence,
+                    mode: modeRef.current,
+                  },
+                  timestamp: Date.now(),
+                  sessionId: 'debug-session',
+                  hypothesisId: 'ACCUM',
+                }),
+              }
+            ).catch(() => {});
+            // #endregion
+
             if (modeRef.current === 'autocomplete') {
-              const combined = accumulatedTranscriptRef.current
-                ? `${accumulatedTranscriptRef.current} ${transcriptText}`
-                : transcriptText;
-
-              // #region agent log
-              fetch(
-                'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    location: 'NotesEditor.tsx:interim-combined',
-                    message:
-                      'Interim transcript - showing accumulated + current (high confidence)',
-                    data: {
-                      accumulated: accumulatedTranscriptRef.current,
-                      interim: transcriptText,
-                      combined,
-                      combinedLength: combined.length,
-                      confidence,
-                    },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    hypothesisId: 'ACCUM',
-                  }),
-                }
-              ).catch(() => {});
-              // #endregion
-
               try {
                 editor?.chain().focus().run();
               } catch {
                 // ignore
               }
               setSuggestion(combined);
+            } else if (modeRef.current === 'suggestion') {
+              // In suggestion mode, update transcript state so the gray bar shows interim results
+              setTranscript(combined);
             }
           }
           // Low-confidence interim results are ignored to filter out absurd guesses

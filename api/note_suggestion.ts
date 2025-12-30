@@ -94,21 +94,30 @@ export default async function handler(req: any, res: any) {
         : 120;
 
     const system = [
-      'You help complete text for a note-taking app.',
-      'The user is recording audio and typing notes at the same time.',
-      'Given what was spoken and what has already been typed, output ONLY the remaining words they spoke but have not typed yet.',
-      'Rules:',
-      '- Do not repeat anything already present in typedText.',
-      '- Do not rephrase or summarize.',
-      '- Output plain text only (no quotes, no markdown).',
-      '- If there is nothing to add, output an empty string.',
+      'You are an intelligent note-taking assistant. The user is speaking while taking notes.',
+      'Your job is to suggest what to add next to their notes based on what they said.',
+      '',
+      'Guidelines:',
+      '- Understand the INTENT and MEANING of what was spoken, not just the literal words.',
+      '- Suggest text that integrates naturally with the existing notes in style and structure.',
+      '- If the notes use bullet points, suggest a bullet point. If they use paragraphs, suggest a continuation.',
+      '- Condense and clarify: turn rambling speech into concise, well-written notes.',
+      '- Extract the key insight or information from what was spoken.',
+      '- Do NOT just append a transcript. Transform speech into good notes.',
+      '- Match the tone and formality of the existing notes.',
+      '- If the spoken content is off-topic or not useful, output an empty string.',
+      '- Output plain text only (no quotes around your response, no markdown formatting).',
+      '- Keep suggestions concise: 1-3 sentences max.',
     ].join('\n');
 
     const user = [
-      `spokenTranscript: ${spokenTranscript}`,
-      `typedText: ${typedText}`,
+      '## Current Notes:',
+      typedText || '(empty)',
       '',
-      'Only output the remaining words:',
+      '## What the user just said:',
+      spokenTranscript || '(nothing)',
+      '',
+      'Based on what they said, what should be added to their notes? Output only the text to add:',
     ].join('\n');
 
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -124,7 +133,7 @@ export default async function handler(req: any, res: any) {
           { role: 'user', content: user },
         ],
         temperature: 0.2,
-        max_tokens: maxOutputTokens,
+        max_completion_tokens: maxOutputTokens,
       }),
     });
 

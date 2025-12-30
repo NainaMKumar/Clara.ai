@@ -86,7 +86,7 @@ async function openaiJson(args: {
         { role: 'user', content: args.user },
       ],
       temperature: args.temperature,
-      max_tokens: args.maxOutputTokens,
+      max_completion_tokens: args.maxOutputTokens,
       response_format: { type: 'json_object' },
     }),
   });

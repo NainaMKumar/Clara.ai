@@ -145,7 +145,7 @@ async function openaiJson(args: {
         { role: 'user', content: args.user },
       ],
       temperature: args.temperature,
-      max_tokens: args.maxOutputTokens,
+      max_completion_tokens: args.maxOutputTokens,
       response_format: { type: 'json_object' },
     }),
   });
@@ -223,6 +223,22 @@ export default async function handler(req: any, res: any) {
     const noteId = String(body.noteId ?? '').trim();
     const title = clampText(body.title ?? '', 200).trim();
     const contentText = clampText(body.contentText ?? '', 20_000).trim();
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'api/note_feedback.ts:226',
+        message: 'Incoming feedback request',
+        data: { noteId, contentLength: contentText.length, title },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'start',
+      }),
+    }).catch(() => {});
+    // #endregion
+
     if (!noteId) return sendJson(res, 400, { error: 'noteId is required' });
     if (!contentText)
       return sendJson(res, 400, { error: 'contentText is required' });
@@ -258,6 +274,21 @@ export default async function handler(req: any, res: any) {
       temperature: 0.2,
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'api/note_feedback.ts:260',
+        message: 'Query generation response',
+        data: { content: queryOut.content, parsed: queryOut.parsed },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'queries',
+      }),
+    }).catch(() => {});
+    // #endregion
+
     const queriesRaw =
       queryOut.parsed && typeof queryOut.parsed === 'object'
         ? (queryOut.parsed as any).queries
@@ -284,6 +315,24 @@ export default async function handler(req: any, res: any) {
       for (const r of results) sourcesRaw.push(r);
       if (sourcesRaw.length >= 10) break;
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'api/note_feedback.ts:287',
+        message: 'Tavily sources',
+        data: {
+          count: sourcesRaw.length,
+          sources: sourcesRaw.map((s) => s.url),
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'sources',
+      }),
+    }).catch(() => {});
+    // #endregion
 
     const sources = sourcesRaw
       .slice(0, 10)
@@ -339,18 +388,96 @@ export default async function handler(req: any, res: any) {
       sourcesBlock || '(none)',
     ].join('\n');
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'api/note_feedback.ts:348',
+        message: 'Critique request inputs',
+        data: {
+          model,
+          maxOutputTokens: 2000,
+          systemLen: critiqueSystem.length,
+          userLen: critiqueUser.length,
+          sourcesCount: sources.length,
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'critique-inputs',
+      }),
+    }).catch(() => {});
+    // #endregion
+
     const critiqueOut = await openaiJson({
       apiKey: openaiKey,
       model,
       system: critiqueSystem,
       user: critiqueUser,
-      maxOutputTokens: 900,
+      maxOutputTokens: 2000, // Increased from 900 to prevent potential truncation issues for large feedbacks
       temperature: 0.2,
     });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'api/note_feedback.ts:350',
+        message: 'Critique response',
+        data: { content: critiqueOut.content, parsed: critiqueOut.parsed },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'critique',
+      }),
+    }).catch(() => {});
+    // #endregion
+
     const items = toFeedbackItemsShape(critiqueOut.parsed)
       // Ensure quote actually appears in the note.
-      .filter((it) => contentText.includes(it.quote));
+      .filter((it) => {
+        if (contentText.includes(it.quote)) return true;
+        // Fallback: try ignoring whitespace differences
+        const normContent = contentText.replace(/\s+/g, ' ');
+        const normQuote = it.quote.replace(/\s+/g, ' ');
+        // #region agent log
+        fetch(
+          'http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'api/note_feedback.ts:359',
+              message: 'Filtering quote',
+              data: {
+                quote: it.quote,
+                normQuote,
+                found: normContent.includes(normQuote),
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              hypothesisId: 'filtering',
+            }),
+          }
+        ).catch(() => {});
+        // #endregion
+        return normContent.includes(normQuote);
+      });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/7542c04f-bb28-428b-b4ed-cc597c89d113', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'api/note_feedback.ts:366',
+        message: 'Final items',
+        data: { itemsCount: items.length },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'final',
+      }),
+    }).catch(() => {});
+    // #endregion
 
     const out: NoteFeedbackResponse = {
       items,

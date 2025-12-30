@@ -86,6 +86,7 @@ async function chat(
   })
   if (!resp.ok) {
     const body = await resp.text().catch(() => '')
+    console.error('Chat request failed:', resp.status, resp.statusText, body)
     throw new Error(`Chat request failed: ${resp.status} ${resp.statusText} ${body}`)
   }
   return (await resp.json()) as ChatResponse

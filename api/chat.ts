@@ -113,6 +113,7 @@ export default async function handler(req: any, res: any) {
 
     return sendJson(res, 200, out);
   } catch (err) {
+    console.error('API Chat Error:', err);
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return sendJson(res, 500, { error: msg });
   }

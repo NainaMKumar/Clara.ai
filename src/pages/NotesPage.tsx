@@ -225,6 +225,7 @@ const NotesPage: React.FC = () => {
       }
       setConversation(prev => [...prev, assistantMessage])
     } catch (e) {
+      console.error('RAG Error:', e);
       setRagError(e instanceof Error ? e.message : 'Failed to ask')
       // Remove the user message if the request failed
       setConversation(prev => prev.filter(msg => msg.id !== userMessage.id))
