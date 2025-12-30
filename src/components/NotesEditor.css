@@ -706,6 +706,12 @@
   user-select: none;
 }
 
+.ghost-text {
+  color: #9ca3af;
+  pointer-events: none;
+  display: inline;
+}
+
 @media (max-width: 768px) {
   .editor-header {
     padding: 1.5rem;
