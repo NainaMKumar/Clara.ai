@@ -110,9 +110,7 @@ function toConnectionsShape(
 
     if (noteIds.length < 1) continue;
 
-    const noteTitles = noteIds.map(
-      (id) => noteIdToTitle.get(id) ?? 'Untitled'
-    );
+    const noteTitles = noteIds.map((id) => noteIdToTitle.get(id) ?? 'Untitled');
 
     const description = String(rec.description ?? '').trim();
     const insight = String(rec.insight ?? '').trim();
@@ -205,13 +203,13 @@ export default async function handler(req: any, res: any) {
         connections: [],
         analyzedNoteIds: noteIds,
         provider: 'openai',
-        model: env.OPENAI_CHAT_MODEL || 'gpt-4o',
+        model: env.OPENAI_CHAT_MODEL || 'gpt-5.2',
       };
       return sendJson(res, 200, out);
     }
 
     const apiKey = requiredEnv('OPENAI_API_KEY');
-    const model = env.OPENAI_CHAT_MODEL || 'gpt-4o';
+    const model = env.OPENAI_CHAT_MODEL || 'gpt-5.2';
 
     // Build context block with all notes
     const notesBlock = Array.from(chunksByNote.entries())
@@ -238,7 +236,7 @@ export default async function handler(req: any, res: any) {
       'Look for:',
       '1. THEMATIC connections: Similar topics discussed from different angles or contexts',
       '2. CONTRADICTIONS: Conflicting information or viewpoints between notes',
-      '3. EXTENSIONS: How one note\'s ideas build upon or support another',
+      "3. EXTENSIONS: How one note's ideas build upon or support another",
       '4. GAPS: Questions or missing pieces that arise from combining the knowledge',
       '',
       'Return ONLY valid JSON with this exact shape:',
@@ -315,4 +313,3 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 500, { error: msg });
   }
 }
-

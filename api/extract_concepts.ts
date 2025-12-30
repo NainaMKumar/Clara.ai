@@ -82,7 +82,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const apiKey = requiredEnv('OPENAI_API_KEY');
-    const model = env.OPENAI_CHAT_MODEL || 'gpt-4o';
+    const model = env.OPENAI_CHAT_MODEL || 'gpt-5.2';
 
     const system = [
       'You extract key concepts, entities, and related topics from note contexts.',
@@ -167,4 +167,3 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 500, { error: msg });
   }
 }
-
