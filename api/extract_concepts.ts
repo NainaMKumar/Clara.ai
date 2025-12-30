@@ -1,19 +1,7 @@
+import type { ExtractConceptsRequest, ExtractConceptsResponse } from './_types';
 import { env } from './env';
 
-type NoteSuggestionRequest = {
-  typedText?: string;
-  spokenTranscript?: string;
-  maxOutputTokens?: number;
-};
-
-type NoteSuggestionResponse = {
-  suggestion: string;
-  provider: 'openai';
-  model: string;
-};
-
 function requiredEnv(name: string): string {
-  // Keep consistent with api/providers/openai.ts behavior.
   const val =
     env[name] ??
     (name === 'OPENAI_API_KEY' ? env.VITE_OPENAI_API_KEY : undefined);
@@ -34,7 +22,6 @@ function applyCors(req: any, res: any): boolean {
   const allowed = getAllowedOrigins();
   const origin = String(req.headers?.origin ?? '');
   if (allowed.length === 0) {
-    // If not configured, don't set CORS headers (safer default).
     return true;
   }
   if (origin && allowed.includes(origin)) {
@@ -54,8 +41,22 @@ function sendJson(res: any, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
-function clampText(input: unknown, maxChars: number): string {
-  return String(input ?? '').slice(0, maxChars);
+function tryParseJson(text: string): unknown | null {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const slice = text.slice(start, end + 1);
+      try {
+        return JSON.parse(slice);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
 }
 
 export default async function handler(req: any, res: any) {
@@ -72,43 +73,44 @@ export default async function handler(req: any, res: any) {
   }
 
   try {
-    const body = (req.body || {}) as NoteSuggestionRequest;
-    const typedText = clampText(body.typedText ?? '', 12_000);
-    const spokenTranscript = clampText(body.spokenTranscript ?? '', 12_000);
+    const body = (req.body || {}) as ExtractConceptsRequest;
+    const question = String(body.question ?? '').trim();
+    const contextSummary = String(body.contextSummary ?? '').slice(0, 8000);
 
-    // This endpoint is meant for "continue what the user was saying" suggestions.
-    if (!typedText.trim() && !spokenTranscript.trim()) {
-      return sendJson(res, 200, {
-        suggestion: '',
-        provider: 'openai',
-        model: env.OPENAI_CHAT_MODEL || 'gpt-5.2',
-      });
+    if (!question) {
+      return sendJson(res, 400, { error: 'question is required' });
     }
 
     const apiKey = requiredEnv('OPENAI_API_KEY');
-    const model = env.OPENAI_CHAT_MODEL || 'gpt-5.2';
-    const maxOutputTokens =
-      typeof body.maxOutputTokens === 'number' &&
-      Number.isFinite(body.maxOutputTokens)
-        ? Math.max(16, Math.min(220, Math.floor(body.maxOutputTokens)))
-        : 120;
+    const model = env.OPENAI_CHAT_MODEL || 'gpt-4o';
 
     const system = [
-      'You help complete text for a note-taking app.',
-      'The user is recording audio and typing notes at the same time.',
-      'Given what was spoken and what has already been typed, output ONLY the remaining words they spoke but have not typed yet.',
+      'You extract key concepts, entities, and related topics from note contexts.',
+      'Given a user question and some context from their notes, identify 2-4 additional search terms',
+      'that would help find related information across their notes.',
+      '',
+      'Focus on:',
+      '- Named entities (people, places, concepts, theories)',
+      '- Related topics that might contain supporting information',
+      '- Terms that could connect to other notes',
+      '',
+      'Return ONLY valid JSON with this exact shape:',
+      '{ "concepts": string[] }',
+      '',
       'Rules:',
-      '- Do not repeat anything already present in typedText.',
-      '- Do not rephrase or summarize.',
-      '- Output plain text only (no quotes, no markdown).',
-      '- If there is nothing to add, output an empty string.',
+      '- Return 2-4 short, specific search phrases',
+      '- Each concept should be different from the original question',
+      '- Focus on what might be in OTHER notes that would be helpful',
     ].join('\n');
 
     const user = [
-      `spokenTranscript: ${spokenTranscript}`,
-      `typedText: ${typedText}`,
+      'QUESTION:',
+      question,
       '',
-      'Only output the remaining words:',
+      'CONTEXT FROM INITIAL SEARCH:',
+      contextSummary || '(none)',
+      '',
+      'Extract 2-4 additional search concepts:',
     ].join('\n');
 
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -123,8 +125,9 @@ export default async function handler(req: any, res: any) {
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
-        temperature: 0.2,
-        max_tokens: maxOutputTokens,
+        temperature: 0.3,
+        max_tokens: 150,
+        response_format: { type: 'json_object' },
       }),
     });
 
@@ -138,16 +141,30 @@ export default async function handler(req: any, res: any) {
     const data = (await resp.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
     };
-    const suggestion = String(data.choices?.[0]?.message?.content ?? '').trim();
+    const content = String(data.choices?.[0]?.message?.content ?? '');
+    const parsed = tryParseJson(content);
 
-    const out: NoteSuggestionResponse = {
-      suggestion,
+    let concepts: string[] = [];
+    if (parsed && typeof parsed === 'object') {
+      const obj = parsed as Record<string, unknown>;
+      if (Array.isArray(obj.concepts)) {
+        concepts = obj.concepts
+          .map((c) => String(c ?? '').trim())
+          .filter(Boolean)
+          .slice(0, 4);
+      }
+    }
+
+    const out: ExtractConceptsResponse = {
+      concepts,
       provider: 'openai',
       model,
     };
+
     return sendJson(res, 200, out);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     return sendJson(res, 500, { error: msg });
   }
 }
+

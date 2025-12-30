@@ -4,6 +4,11 @@ export type Citation = {
   quote: string
 }
 
+export type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export type EmbedResponse = {
   vectors: number[][]
   dim: number

@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, RetrievedChunk } from './_types';
+import type { ChatMessage, ChatRequest, ChatResponse, RetrievedChunk } from './_types';
 import { env } from './env';
 import { openaiProvider } from './providers/openai';
 
@@ -80,16 +80,34 @@ export default async function handler(req: any, res: any) {
     const contexts = clampContexts(
       Array.isArray(body.contexts) ? body.contexts : []
     );
+    
+    // Clamp conversation history to prevent abuse
+    const maxHistoryMessages = 20;
+    const history: ChatMessage[] = (Array.isArray(body.history) ? body.history : [])
+      .slice(-maxHistoryMessages)
+      .filter((m): m is ChatMessage => 
+        m && typeof m === 'object' &&
+        (m.role === 'user' || m.role === 'assistant') &&
+        typeof m.content === 'string'
+      )
+      .map((m) => ({
+        role: m.role,
+        content: String(m.content).slice(0, 4000), // Clamp individual message length
+      }));
+    
+    // Increased default from 400 to 1200 to accommodate chain-of-thought responses
+    // and prevent truncation of longer answers
     const maxOutputTokens =
       typeof body.options?.maxOutputTokens === 'number' &&
       Number.isFinite(body.options.maxOutputTokens)
-        ? Math.max(64, Math.min(1024, Math.floor(body.options.maxOutputTokens)))
-        : 400;
+        ? Math.max(64, Math.min(2000, Math.floor(body.options.maxOutputTokens)))
+        : 1200;
 
     const api = openaiProvider();
     const out: ChatResponse = await api.createChat({
       question,
       contexts,
+      history,
       maxOutputTokens,
     });
 

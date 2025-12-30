@@ -24,9 +24,15 @@ export type EmbedResponse = {
   model: string;
 };
 
+export type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 export type ChatRequest = {
   question: string;
   contexts: RetrievedChunk[];
+  history?: ChatMessage[];
   options?: {
     maxOutputTokens?: number;
   };
@@ -86,6 +92,51 @@ export type NoteFeedbackFixRequest = {
 export type NoteFeedbackFixResponse = {
   mode: NoteFeedbackFixMode;
   fixText: string;
+  provider: RagProvider;
+  model: string;
+};
+
+// --- Extract Concepts (for multi-hop retrieval) ---
+
+export type ExtractConceptsRequest = {
+  question: string;
+  contextSummary: string;
+};
+
+export type ExtractConceptsResponse = {
+  concepts: string[];
+  provider: RagProvider;
+  model: string;
+};
+
+// --- Note Connections (cross-note analysis) ---
+
+export type ConnectionType = 'thematic' | 'contradiction' | 'extension' | 'gap';
+
+export type ConnectionQuote = {
+  noteId: string;
+  noteTitle: string;
+  text: string;
+};
+
+export type NoteConnection = {
+  type: ConnectionType;
+  noteIds: string[];
+  noteTitles: string[];
+  description: string;
+  quotes: ConnectionQuote[];
+  insight: string; // The "aha" moment or extrapolation
+};
+
+export type NoteConnectionsRequest = {
+  noteIds?: string[]; // If empty/undefined, analyze all indexed notes
+  focusNoteId?: string; // Optional: prioritize connections to this note
+  maxConnections?: number; // Default: 8
+};
+
+export type NoteConnectionsResponse = {
+  connections: NoteConnection[];
+  analyzedNoteIds: string[];
   provider: RagProvider;
   model: string;
 };

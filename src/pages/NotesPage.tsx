@@ -4,6 +4,15 @@ import NotesEditor from '../components/NotesEditor'
 import { Note, Folder } from '../types'
 import './NotesPage.css'
 import * as rag from '../rag/rag'
+import type { ChatMessage } from '../rag/rag'
+
+type ConversationMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  citations?: Array<{ chunkId: string; noteId: string; quote: string }>
+  timestamp: number
+}
 
 const NotesPage: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>(() => {
@@ -35,8 +44,7 @@ const NotesPage: React.FC = () => {
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>('1')
   const [ragQuestion, setRagQuestion] = useState('')
-  const [ragAnswer, setRagAnswer] = useState<string>('')
-  const [ragCitations, setRagCitations] = useState<Array<{ chunkId: string; noteId: string; quote: string }>>([])
+  const [conversation, setConversation] = useState<ConversationMessage[]>([])
   const [ragError, setRagError] = useState<string>('')
   const [isAsking, setIsAsking] = useState(false)
   const [isIndexing, setIsIndexing] = useState(false)
@@ -45,6 +53,7 @@ const NotesPage: React.FC = () => {
   const [isRagOpen, setIsRagOpen] = useState(true)
   const indexTimersRef = useRef<Record<string, number>>({})
   const isIndexingAllRef = useRef(false)
+  const conversationEndRef = useRef<HTMLDivElement>(null)
 
   const handleNoteSelect = (id: string) => {
     setSelectedNoteId(id)
@@ -183,18 +192,56 @@ const NotesPage: React.FC = () => {
     if (!q) return
     setIsAsking(true)
     setRagError('')
+    
+    // Add user message to conversation immediately
+    const userMessage: ConversationMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: q,
+      timestamp: Date.now(),
+    }
+    setConversation(prev => [...prev, userMessage])
+    setRagQuestion('')
+    
     try {
       // Safety net: make sure the full note corpus is indexed before retrieval.
       await ensureAllIndexed()
-      const out = await rag.ask(q)
-      setRagAnswer(out.answer.answer)
-      setRagCitations(out.answer.citations || [])
+      
+      // Build history from previous messages (excluding the current one we just added)
+      const history: ChatMessage[] = conversation.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }))
+      
+      const out = await rag.askWithHistory(q, history)
+      
+      // Add assistant response to conversation
+      const assistantMessage: ConversationMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: out.answer.answer,
+        citations: out.answer.citations || [],
+        timestamp: Date.now(),
+      }
+      setConversation(prev => [...prev, assistantMessage])
     } catch (e) {
       setRagError(e instanceof Error ? e.message : 'Failed to ask')
+      // Remove the user message if the request failed
+      setConversation(prev => prev.filter(msg => msg.id !== userMessage.id))
     } finally {
       setIsAsking(false)
     }
   }
+
+  const clearConversation = () => {
+    setConversation([])
+    setRagError('')
+  }
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    conversationEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [conversation])
 
   useEffect(() => {
     // Index everything once on load / refresh so the buttons aren’t necessary.
@@ -272,53 +319,91 @@ const NotesPage: React.FC = () => {
               <div className="rag-panel" aria-label="Ask Clara">
                 <div className="rag-panel-header">
                   <div className="rag-title">Ask Clara about your notes</div>
-                  <div className="rag-status">{isIndexing ? 'Indexing…' : lastIndexMsg}</div>
+                  <div className="rag-header-actions">
+                    <div className="rag-status">{isIndexing ? 'Indexing…' : lastIndexMsg}</div>
+                    {conversation.length > 0 && (
+                      <button
+                        type="button"
+                        className="rag-button secondary small"
+                        onClick={clearConversation}
+                        title="Clear conversation"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="rag-input-row">
-                  <input
-                    className="rag-input"
-                    placeholder="Ask a question…"
-                    value={ragQuestion}
-                    onChange={(e) => setRagQuestion(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void askClara()
-                    }}
-                  />
-                  <button type="button" className="rag-button primary" onClick={() => void askClara()} disabled={isAsking || isIndexing}>
-                    {isAsking ? 'Asking…' : 'Ask'}
-                  </button>
+                <div className="rag-conversation" role="log" aria-label="Conversation with Clara">
+                  {conversation.length === 0 && !isAsking ? (
+                    <div className="rag-empty-state">
+                      <p>Ask Clara anything about your notes. She'll search through them to find relevant information.</p>
+                    </div>
+                  ) : (
+                    conversation.map((msg) => (
+                      <div key={msg.id} className={`rag-message rag-message--${msg.role}`}>
+                        <div className="rag-message-role">
+                          {msg.role === 'user' ? 'You' : 'Clara'}
+                        </div>
+                        <div className="rag-message-content">{msg.content}</div>
+                        {msg.citations && msg.citations.length > 0 && (
+                          <div className="rag-citations">
+                            <div className="rag-citations-title">Citations</div>
+                            <ul>
+                              {msg.citations.map((c) => (
+                                <li key={`${c.chunkId}:${c.noteId}`}>
+                                  <button
+                                    type="button"
+                                    className="rag-citation-button"
+                                    onClick={() => {
+                                      setSelectedNoteId(c.noteId)
+                                      setActiveCitation({ noteId: c.noteId, quote: c.quote })
+                                    }}
+                                  >
+                                    <span className="rag-citation-note">{notes.find((n) => n.id === c.noteId)?.title || c.noteId}</span>
+                                    <span className="rag-citation-quote"> — "{c.quote}"</span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                  {isAsking && (
+                    <div className="rag-message rag-message--assistant rag-message--loading">
+                      <div className="rag-message-role">Clara</div>
+                      <div className="rag-message-content">
+                        <span className="rag-typing-indicator">
+                          <span></span><span></span><span></span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={conversationEndRef} />
                 </div>
 
                 {ragError ? <div className="rag-error">{ragError}</div> : null}
 
-                {ragAnswer ? (
-                  <div className="rag-output">
-                    <div className="rag-answer">{ragAnswer}</div>
-                    {ragCitations.length ? (
-                      <div className="rag-citations">
-                        <div className="rag-citations-title">Citations</div>
-                        <ul>
-                          {ragCitations.map((c) => (
-                            <li key={`${c.chunkId}:${c.noteId}`}>
-                              <button
-                                type="button"
-                                className="rag-citation-button"
-                                onClick={() => {
-                                  setSelectedNoteId(c.noteId)
-                                  setActiveCitation({ noteId: c.noteId, quote: c.quote })
-                                }}
-                              >
-                                <span className="rag-citation-note">{notes.find((n) => n.id === c.noteId)?.title || c.noteId}</span>
-                                <span className="rag-citation-quote"> — “{c.quote}”</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                <div className="rag-input-row">
+                  <input
+                    className="rag-input"
+                    placeholder={conversation.length > 0 ? "Ask a follow-up question…" : "Ask a question…"}
+                    value={ragQuestion}
+                    onChange={(e) => setRagQuestion(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        void askClara()
+                      }
+                    }}
+                    disabled={isAsking}
+                  />
+                  <button type="button" className="rag-button primary" onClick={() => void askClara()} disabled={isAsking || isIndexing || !ragQuestion.trim()}>
+                    {isAsking ? 'Asking…' : 'Send'}
+                  </button>
+                </div>
               </div>
             </div>
           </aside>

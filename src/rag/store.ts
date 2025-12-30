@@ -222,4 +222,107 @@ export async function vectorSearchTopK(args: {
   return results
 }
 
+/**
+ * Batch fetch all chunks for a set of note IDs.
+ * Useful for connection analysis across multiple notes.
+ */
+export async function getAllChunksForNotes(noteIds: string[]): Promise<ChunkRow[]> {
+  if (noteIds.length === 0) return []
+  const noteIdSet = new Set(noteIds)
+  const allChunks = await getAllChunks()
+  return allChunks.filter((c) => noteIdSet.has(c.noteId))
+}
+
+/**
+ * Get a random sample of chunks for serendipitous discovery.
+ * Useful for finding unexpected connections.
+ */
+export async function getRandomSampleChunks(n: number): Promise<ChunkRow[]> {
+  const allChunks = await getAllChunks()
+  if (allChunks.length <= n) return allChunks
+
+  // Fisher-Yates shuffle for random sampling
+  const shuffled = [...allChunks]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled.slice(0, n)
+}
+
+/**
+ * Search with multiple query vectors in parallel and merge results.
+ * Deduplicates by chunkId, keeping the highest score for each chunk.
+ * Useful for multi-hop retrieval where we expand the search space.
+ */
+export async function searchMultipleQueries(args: {
+  queryVectorsNormalized: number[][]
+  k: number
+  minScore?: number
+  maxPerNote?: number
+}): Promise<Retrieved[]> {
+  const { queryVectorsNormalized, k, minScore = 0.2, maxPerNote = 4 } = args
+  
+  if (queryVectorsNormalized.length === 0) return []
+  
+  const vectors = await getAllVectors()
+  const chunks = await getAllChunks()
+  const chunkById = new Map<string, ChunkRow>(chunks.map((c) => [c.chunkId, c]))
+
+  // Score each chunk against all query vectors, keeping the max score
+  const chunkScores = new Map<string, number>()
+  
+  for (const qVec of queryVectorsNormalized) {
+    for (const v of vectors) {
+      const score = cosineSimilarityNormalized(qVec, v.vector)
+      if (Number.isFinite(score) && score >= minScore) {
+        const existing = chunkScores.get(v.chunkId) ?? 0
+        if (score > existing) {
+          chunkScores.set(v.chunkId, score)
+        }
+      }
+    }
+  }
+
+  // Sort by score descending
+  const scored = Array.from(chunkScores.entries())
+    .map(([chunkId, score]) => ({ chunkId, score }))
+    .sort((a, b) => b.score - a.score)
+
+  // Apply maxPerNote constraint and return top k
+  const results: Retrieved[] = []
+  const perNote = new Map<string, number>()
+
+  for (const s of scored) {
+    if (results.length >= k) break
+    const chunk = chunkById.get(s.chunkId)
+    if (!chunk) continue
+    const count = perNote.get(chunk.noteId) ?? 0
+    if (count >= maxPerNote) continue
+    perNote.set(chunk.noteId, count + 1)
+
+    results.push({
+      chunkId: chunk.chunkId,
+      noteId: chunk.noteId,
+      noteTitle: chunk.noteTitle,
+      text: chunk.chunkText,
+      score: s.score,
+    })
+  }
+
+  return results
+}
+
+/**
+ * Get all unique note IDs that have indexed chunks.
+ */
+export async function getAllIndexedNoteIds(): Promise<string[]> {
+  const chunks = await getAllChunks()
+  const noteIds = new Set<string>()
+  for (const c of chunks) {
+    noteIds.add(c.noteId)
+  }
+  return Array.from(noteIds)
+}
+
 
