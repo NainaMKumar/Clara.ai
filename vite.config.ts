@@ -38,6 +38,7 @@ function createApiMiddleware() {
     if (
       pathname !== '/api/embed' &&
       pathname !== '/api/chat' &&
+      pathname !== '/api/note_suggestion' &&
       pathname !== '/api/note_feedback' &&
       pathname !== '/api/note_feedback_fix'
     )
@@ -63,6 +64,10 @@ function createApiMiddleware() {
       }
       if (pathname === '/api/chat') {
         const mod = await import('./api/chat')
+        return await mod.default(req, res)
+      }
+      if (pathname === '/api/note_suggestion') {
+        const mod = await import('./api/note_suggestion')
         return await mod.default(req, res)
       }
       if (pathname === '/api/note_feedback') {

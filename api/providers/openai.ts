@@ -51,7 +51,7 @@ function tryParseJson(text: string): unknown | null {
 export function openaiProvider(): RagProviderApi {
   const apiKey = requiredEnv('OPENAI_API_KEY')
   const embedModel = env.OPENAI_EMBED_MODEL || 'text-embedding-3-small'
-  const chatModel = env.OPENAI_CHAT_MODEL || 'gpt-4o-mini'
+  const chatModel = env.OPENAI_CHAT_MODEL || 'gpt-5.2'
 
   return {
     ctx: { provider: 'openai', embedModel, chatModel },
@@ -83,11 +83,14 @@ export function openaiProvider(): RagProviderApi {
       const { question, contexts, maxOutputTokens } = args
 
       const system = [
-        'You are Clara, a helpful assistant answering questions using ONLY the provided note contexts.',
-        'If the contexts are insufficient, say you do not know based on the notes.',
+        'You are Clara, a helpful assistant.',
+        'Prefer using the provided note contexts when they are relevant and sufficient.',
+        'If the contexts are missing or insufficient, you may answer using your general knowledge.',
         'Return ONLY valid JSON with this exact shape:',
         '{ "answer": string, "citations": Array<{ "chunkId": string, "noteId": string, "quote": string }> }',
+        'Only include citations for claims that are directly supported by the provided contexts.',
         'Citations must quote exact text snippets from the contexts (short), and chunkId/noteId must match a provided context.',
+        'If you answer using general knowledge not found in the contexts, return an empty citations array (do not fabricate citations).',
       ].join('\n')
 
       const contextBlock = contexts
@@ -122,7 +125,7 @@ export function openaiProvider(): RagProviderApi {
             { role: 'user', content: user },
           ],
           temperature: 0.2,
-          max_tokens: maxOutputTokens,
+          max_completion_tokens: maxOutputTokens,
           response_format: { type: 'json_object' },
         }),
       })

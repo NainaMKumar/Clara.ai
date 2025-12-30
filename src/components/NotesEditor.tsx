@@ -26,8 +26,91 @@ function makeIssueId(it: NoteFeedbackItem) {
   return `${it.kind}:${it.quote}:${it.issue}`.slice(0, 200)
 }
 
+function dismissedStorageKey(noteId: string) {
+  return `clara_note_feedback_dismissed_v1:${noteId}`
+}
+
+function loadDismissedIds(noteId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(dismissedStorageKey(noteId))
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return new Set()
+    return new Set(arr.map((x) => String(x ?? '')).filter(Boolean))
+  } catch {
+    return new Set()
+  }
+}
+
+function persistDismissedIds(noteId: string, ids: Set<string>) {
+  try {
+    // cap size to avoid unbounded growth
+    const arr = Array.from(ids).slice(-200)
+    localStorage.setItem(dismissedStorageKey(noteId), JSON.stringify(arr))
+  } catch {
+    // ignore
+  }
+}
+
 function normalizeForSearch(s: string) {
-  return s.replace(/\s+/g, ' ').trim()
+  // Normalize whitespace + common Unicode punctuation variants so matching is robust.
+  // NOTE: Used for search only; do not assume indices map 1:1 to the raw string.
+  return String(s ?? '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function normalizeWithMap(raw: string): { norm: string; normToRaw: number[] } {
+  // Produces a normalized string plus a mapping from each normalized character index -> raw character index.
+  // Normalization rules:
+  // - curly quotes/dashes -> ascii
+  // - lowercasing
+  // - collapse any whitespace run into a single space
+  let norm = ''
+  const normToRaw: number[] = []
+
+  let i = 0
+  while (i < raw.length) {
+    const ch = raw[i]
+    // Collapse whitespace runs.
+    if (/\s/.test(ch)) {
+      const start = i
+      while (i < raw.length && /\s/.test(raw[i])) i++
+      // Only emit a single space if we already have some content and the previous char wasn't a space.
+      if (norm.length > 0 && norm[norm.length - 1] !== ' ') {
+        norm += ' '
+        normToRaw.push(start)
+      }
+      continue
+    }
+
+    let out = ch
+    if (out === '“' || out === '”') out = '"'
+    else if (out === '‘' || out === '’') out = "'"
+    else if (out === '–' || out === '—') out = '-'
+
+    out = out.toLowerCase()
+    norm += out
+    normToRaw.push(i)
+    i++
+  }
+
+  // Trim trailing space in normalized representation (keep mapping consistent)
+  while (norm.endsWith(' ')) {
+    norm = norm.slice(0, -1)
+    normToRaw.pop()
+  }
+  // Trim leading space similarly
+  while (norm.startsWith(' ')) {
+    norm = norm.slice(1)
+    normToRaw.shift()
+  }
+
+  return { norm, normToRaw }
 }
 
 function toPlainTextContent(text: string): Array<{ type: string; text?: string }> {
@@ -115,62 +198,55 @@ function getListInsertTarget(doc: any, from: number): { pos: number; listType: '
 }
 
 function findQuoteRangeInDoc(doc: any, quote: string): { from: number; to: number } | null {
-  const q = normalizeForSearch(quote)
-  if (!q) return null
+  const qRaw = String(quote ?? '').trim()
+  if (!qRaw) return null
 
   let combined = ''
-  const map: number[] = [] // character index -> doc position
+  const charToDocPos: number[] = [] // raw character index -> doc position
 
   doc.descendants((node: any, pos: number) => {
     if (!node.isText) return true
     const text = String(node.text ?? '')
     for (let i = 0; i < text.length; i++) {
       combined += text[i]
-      map.push(pos + i)
+      charToDocPos.push(pos + i)
     }
     return true
   })
 
-  const hay = normalizeForSearch(combined)
-  // We normalized whitespace; mapping is approximate but works well for short quotes.
-  const idx = hay.indexOf(q)
-  if (idx < 0) return null
+  if (!combined) return null
 
-  // Convert normalized index back to raw index by scanning both strings together.
-  // This keeps decoration placement close even when multiple spaces/newlines exist.
-  let rawStart = 0
-  let normSeen = 0
-  const raw = combined
-  while (rawStart < raw.length && normSeen < idx) {
-    const ch = raw[rawStart]
-    const isWs = /\s/.test(ch)
-    if (isWs) {
-      // Count this whitespace only if it starts a collapsed whitespace run.
-      const prev = rawStart > 0 ? raw[rawStart - 1] : ''
-      if (!/\s/.test(prev)) normSeen += 1
-    } else {
-      normSeen += 1
-    }
-    rawStart += 1
+  // Fast path: exact substring (best highlighting).
+  const exactIdx = combined.indexOf(qRaw)
+  let rawStart: number | null = null
+  let rawEndExclusive: number | null = null
+  if (exactIdx >= 0) {
+    rawStart = exactIdx
+    rawEndExclusive = exactIdx + qRaw.length
+  } else {
+    // Robust path: normalized search with mapping back to raw indices.
+    const hay = normalizeWithMap(combined)
+    const qNorm = normalizeForSearch(qRaw)
+    if (!qNorm) return null
+    const idx = hay.norm.indexOf(qNorm)
+    if (idx < 0) return null
+
+    const startRaw = hay.normToRaw[idx]
+    const endNormIdx = idx + qNorm.length
+    const endRaw =
+      endNormIdx < hay.normToRaw.length ? hay.normToRaw[endNormIdx] : combined.length
+
+    rawStart = startRaw
+    rawEndExclusive = endRaw
   }
 
-  let rawEnd = rawStart
-  let normNeed = q.length
-  let normCount = 0
-  while (rawEnd < raw.length && normCount < normNeed) {
-    const ch = raw[rawEnd]
-    const isWs = /\s/.test(ch)
-    if (isWs) {
-      const prev = rawEnd > 0 ? raw[rawEnd - 1] : ''
-      if (!/\s/.test(prev)) normCount += 1
-    } else {
-      normCount += 1
-    }
-    rawEnd += 1
-  }
+  if (rawStart === null || rawEndExclusive === null) return null
+  rawStart = Math.max(0, Math.min(rawStart, charToDocPos.length - 1))
+  rawEndExclusive = Math.max(rawStart + 1, Math.min(rawEndExclusive, charToDocPos.length))
 
-  const from = map[rawStart]
-  const to = map[Math.max(rawStart, rawEnd - 1)]
+  const from = charToDocPos[rawStart]
+  const toCharIdx = Math.max(rawStart, rawEndExclusive - 1)
+  const to = charToDocPos[toCharIdx]
   if (!Number.isFinite(from) || !Number.isFinite(to)) return null
   return { from, to: to + 1 }
 }
@@ -284,13 +360,17 @@ function toEditorHtml(content: string) {
 const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const [title, setTitle] = useState(note.title)
   const [isRecording, setIsRecording] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [suggestion, setSuggestion] = useState('')
-  const [deepgramSocket, setDeepgramSocket] = useState<WebSocket | null>(null)
+  const deepgramSocketRef = useRef<WebSocket | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef = useRef<MediaStream | null>(null)
-  const [mode, setMode] = useState<'autocomplete' | 'suggestion'>('suggestion')
+  // Default to "autocomplete" so users immediately see speech appear in the note as a transcript.
+  const [mode, setMode] = useState<'autocomplete' | 'suggestion'>('autocomplete')
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false)
+  const [recordingError, setRecordingError] = useState('')
+  const [suggestionError, setSuggestionError] = useState('')
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
   const [linkText, setLinkText] = useState('')
   const [linkUrl, setLinkUrl] = useState('https://')
@@ -424,7 +504,9 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   useEffect(() => {
     setTitle(note.title)
     setTranscript('')
-      setSuggestion('')
+    setSuggestion('')
+    setRecordingError('')
+    setSuggestionError('')
     setIsLoadingFeedback(false)
     setFeedbackError('')
     setFeedbackActionMsg('')
@@ -442,8 +524,21 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       feedbackActionTimerRef.current = null
     }
     // If you switch notes mid-recording, stop cleanly.
+    if (isRecording) stopRecording()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.id])
+
+  useEffect(() => {
+    // Stop any active recording when the editor unmounts.
+    return () => {
+      try {
+        stopRecording()
+      } catch {
+        // ignore
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     trackedIssuesRef.current = trackedIssues
@@ -610,6 +705,14 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     window.requestAnimationFrame(() => computeAnnotationPins())
   }
 
+  const dismissFeedbackItem = (localId: string) => {
+    const ids = loadDismissedIds(note.id)
+    ids.add(localId)
+    persistDismissedIds(note.id, ids)
+    resolveTrackedIssue(localId)
+    flashFeedbackAction('Dismissed feedback item')
+  }
+
   const openFixReview = (it: TrackedIssue) => {
     setActiveFixId(it.localId)
     setFixDraftMode(it.kind === 'inaccurate' ? 'replace' : 'insert')
@@ -701,7 +804,10 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
       const data = (await resp.json()) as NoteFeedbackResponse
       const items = Array.isArray(data.items) ? data.items : []
       // Start tracking issues for persistent highlights + right-side annotations.
-      const nextIssues = items.map((it) => ({ ...it, localId: makeIssueId(it), resolved: false }))
+      const dismissed = loadDismissedIds(note.id)
+      const nextIssues = items
+        .map((it) => ({ ...it, localId: makeIssueId(it), resolved: false }))
+        .filter((it) => !dismissed.has(it.localId))
       setTrackedIssues(nextIssues)
       trackedIssuesRef.current = nextIssues
       window.requestAnimationFrame(() => computeAnnotationPins())
@@ -821,7 +927,7 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   }, [annotationPins, hasRequestedFeedback])
 
   const handleRecordingToggle = () => {
-    if (isRecording) {
+    if (isRecording || isConnecting) {
       // Stop recording
       stopRecording()
     } else {
@@ -830,33 +936,21 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     }
   }
 
-  const fetchAISuggestion = async(typedText: string, spokenTranscript: string) =>  {
-    const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${OPENAI_API_KEY}`
-          },
-          body: JSON.stringify({
-            model: 'gpt-4',
-            messages: [
-              {
-                role: 'system',
-                content: 'You help complete text. The user spoke a sentence and typed part of it. Output ONLY the remaining words they spoke but haven\'t typed yet. Do not repeat what they already typed. Do not rephrase. Extract only the untyped portion.'
-              },
-              {
-                role: 'user',
-                content: `What was recorded: "${spokenTranscript}"\n What the user typed: "${typedText}"\n\nOnly output the remaining words:`
-              }
-            ],
-            max_tokens: 100,
-            temperature: 0.2
-          })
-        })
-
-        const data = await response.json()
-        return data.choices[0].message.content
+  const fetchAISuggestion = async (typedText: string, spokenTranscript: string) => {
+    const resp = await fetch('/api/note_suggestion', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        typedText,
+        spokenTranscript,
+      }),
+    })
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`Suggestion request failed: ${resp.status} ${resp.statusText} ${body}`)
+    }
+    const data = (await resp.json()) as { suggestion?: string }
+    return String(data.suggestion ?? '').trim()
   }
 
   // Debounced AI suggestion while typing (only in "suggestion" mode).
@@ -868,19 +962,21 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     const timer = window.setTimeout(async () => {
       // current user text
       const currentText = editor?.getText() ?? ''
-      // transcript context
-      const context = currentText + (transcript ? '' + transcript : '')
-      if (context.trim().length <= 10) return
+      const spoken = transcript
+      if ((currentText + spoken).trim().length <= 10) return
 
-        setIsLoadingSuggestion(true)
-        try {
-        const aiSuggestion = await fetchAISuggestion(currentText, context)
-          setSuggestion(aiSuggestion)
-          setTranscript('')
-        } catch (error) {
+      setIsLoadingSuggestion(true)
+      setSuggestionError('')
+      try {
+        const aiSuggestion = await fetchAISuggestion(currentText, spoken)
+        setSuggestion(aiSuggestion)
+        setTranscript('')
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Failed to fetch AI suggestion'
+        setSuggestionError(msg)
         console.error('Failed to fetch AI suggestion', error)
-        } finally {
-          setIsLoadingSuggestion(false)
+      } finally {
+        setIsLoadingSuggestion(false)
       }
     }, 1500)
 
@@ -888,45 +984,155 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   }, [editor, transcript, mode])
 
   const startRecording = async () => {
-    const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY || ''
-    const socket = new WebSocket('wss://api.deepgram.com/v1/listen', ['token', DEEPGRAM_API_KEY])
+    setRecordingError('')
+    setSuggestionError('')
+    setIsConnecting(true)
 
-    socket.onopen = async () => {
+    const DEEPGRAM_API_KEY = String(import.meta.env.VITE_DEEPGRAM_API_KEY ?? '').trim()
+    if (!DEEPGRAM_API_KEY) {
+      setRecordingError('Missing VITE_DEEPGRAM_API_KEY. Add it to your .env and restart the dev server.')
+      setIsConnecting(false)
+      return
+    }
+    if (!('MediaRecorder' in window)) {
+      setRecordingError('This browser does not support audio recording (MediaRecorder unavailable).')
+      setIsConnecting(false)
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setRecordingError('This browser does not support microphone recording.')
+      setIsConnecting(false)
+      return
+    }
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+      setRecordingError('Microphone access requires HTTPS (or localhost).')
+      setIsConnecting(false)
+      return
+    }
+
+    let stream: MediaStream
+    try {
+      // Optional: check permission state if the browser supports it.
+      try {
+        const perm = await (navigator as any)?.permissions?.query?.({ name: 'microphone' })
+        if (perm?.state === 'denied') {
+          setRecordingError('Microphone permission is blocked for this site. In your browser, open Site Settings and set Microphone to Allow, then reload.')
+          setIsConnecting(false)
+          return
+        }
+      } catch {
+        // ignore
+      }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch (e) {
+      // DOMException names we commonly see:
+      // - NotAllowedError: user/browser blocked permission
+      // - NotFoundError: no microphone device
+      // - NotReadableError: mic already in use or OS-level block
+      // - SecurityError: insecure context, etc.
+      const name = typeof (e as any)?.name === 'string' ? String((e as any).name) : ''
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setRecordingError(
+          'Microphone permission denied. Check: (1) browser site settings for localhost:5173 (Allow mic), and (2) macOS System Settings → Privacy & Security → Microphone (allow your browser), then reload.'
+        )
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setRecordingError('No microphone device found. Plug in/enable a mic and try again.')
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        setRecordingError('Microphone is busy or blocked by the OS. Close other apps/tabs using the mic (Zoom/Meet/etc) and try again.')
+      } else if (name === 'SecurityError') {
+        setRecordingError('Microphone blocked due to browser security policy. Use HTTPS (or localhost) and reload.')
+      } else {
+        setRecordingError(e instanceof Error ? e.message : 'Failed to access microphone')
+      }
+      setIsConnecting(false)
+      return
+    }
+
+    mediaStreamRef.current = stream
+
+    // Show immediate UI feedback that we are attempting to record.
+    setIsRecording(true)
+
+    const socket = new WebSocket(
+      // Parameters tuned for MediaRecorder+Opus.
+      'wss://api.deepgram.com/v1/listen?punctuate=true&smart_format=true&interim_results=true&encoding=opus&sample_rate=48000',
+      ['token', DEEPGRAM_API_KEY]
+    )
+    deepgramSocketRef.current = socket
+
+    socket.onerror = () => {
+      setRecordingError('Deepgram connection error. Check your API key and network.')
+      stopRecording()
+    }
+
+    socket.onclose = (ev) => {
+      // If we didn't explicitly stop, surface a reason.
+      if (isRecording) {
+        const msg = ev.code === 1000 ? 'Deepgram connection closed.' : `Deepgram connection closed (code ${ev.code}).`
+        setRecordingError(msg)
+        stopRecording()
+      }
+    }
+
+    socket.onopen = () => {
+      setIsConnecting(false)
       setIsRecording(true)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      setTranscript('')
+      setSuggestion('')
 
-      mediaStreamRef.current = stream
+      let mediaRecorder: MediaRecorder
+      try {
+        // Prefer webm if available; Safari may throw here, so fall back.
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      } catch {
+        mediaRecorder = new MediaRecorder(stream)
+      }
+
       mediaRecorderRef.current = mediaRecorder
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
-          socket.send(event.data)
+        try {
+          if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+            socket.send(event.data)
+          }
+        } catch {
+          // ignore
         }
       }
       mediaRecorder.start(250) // Send data in 250ms chunks
 
       // receive transcription results
       socket.onmessage = (message) => {
-        const data = JSON.parse(message.data)
-        const transcriptText = data.channel?.alternatives?.[0]?.transcript
-        if (transcriptText) {
-          setTranscript(prev => prev + ' ' + transcriptText)
-          if (mode == 'autocomplete') {
+        try {
+          const data = JSON.parse(message.data)
+          // Surface Deepgram error payloads (otherwise it just looks like "no transcript").
+          const maybeErr =
+            (typeof data?.error === 'string' && data.error) ||
+            (typeof data?.description === 'string' && data.description) ||
+            (typeof data?.message === 'string' && data.message) ||
+            ''
+          if (data?.type === 'Error' || maybeErr) {
+            setRecordingError(`Deepgram error: ${maybeErr || 'Unknown error'}`)
+            stopRecording()
+            return
+          }
+          const transcriptText = String(data.channel?.alternatives?.[0]?.transcript ?? '').trim()
+          if (!transcriptText) return
+
+          setTranscript((prev) => (prev ? `${prev} ${transcriptText}` : transcriptText))
+          if (mode === 'autocomplete') {
             editor?.chain().focus().insertContent(`${transcriptText} `).run()
             setSuggestion('')
-          } else {
-            setSuggestion(prev => prev + ' ' + transcriptText)
           }
-          
+        } catch (e) {
+          console.error('Deepgram message parse failed', e)
         }
       }
-      setDeepgramSocket(socket)
     }
-
   }
 
   const stopRecording = () => {
+    setIsConnecting(false)
     setIsRecording(false)
     if (mediaRecorderRef) {
       mediaRecorderRef.current?.stop()
@@ -938,9 +1144,13 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     }
 
     // close the Deepgram websocket
-    if (deepgramSocket) {
-      deepgramSocket.close()
-      setDeepgramSocket(null)
+    if (deepgramSocketRef.current) {
+      try {
+        deepgramSocketRef.current.close()
+      } catch {
+        // ignore
+      }
+      deepgramSocketRef.current = null
     }
 
     setTranscript('')
@@ -1178,7 +1388,11 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
         <div className="toolbar-group" aria-label="AI modes">
         <button 
           className={`mode-button ${mode === 'autocomplete' ? 'active' : ''}`}
-          onClick={() => setMode('autocomplete')}
+          onClick={() => {
+            setMode('autocomplete')
+            setSuggestion('')
+            setSuggestionError('')
+          }}
           title="Autocomplete mode"
             type="button"
         >
@@ -1187,7 +1401,11 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
 
         <button 
           className={`mode-button ${mode === 'suggestion' ? 'active': ''}`}
-          onClick={() => setMode('suggestion')}
+          onClick={() => {
+            setMode('suggestion')
+            setSuggestion('')
+            setSuggestionError('')
+          }}
           title="suggestion mode"
             type="button"
         >
@@ -1201,14 +1419,23 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
         <button
           className={`record-button ${isRecording ? 'recording' : ''}`}
           onClick={handleRecordingToggle}
-          title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          title={isRecording || isConnecting ? 'Stop Recording' : 'Start Recording'}
             type="button"
         >
           <span className="record-icon"></span>
-          {isRecording ? 'Stop Recording' : 'Start Recording'}
+          {isConnecting ? 'Connecting…' : isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
         </div>
       </div>
+      {recordingError ? (
+        <div className="suggestion-bar" role="status" aria-live="polite">
+          {recordingError}
+        </div>
+      ) : isRecording && mode === 'suggestion' && transcript.trim() ? (
+        <div className="suggestion-bar" role="status" aria-live="polite">
+          Live transcript: “{transcript.slice(-240)}”
+        </div>
+      ) : null}
       <div className="editor-content" ref={editorScrollRef}>
         {(() => {
           const unresolvedCount = trackedIssues.filter((x) => !x.resolved).length
@@ -1280,7 +1507,12 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                   </div>
 
                   {activeFixId === p.localId ? (
-                    <div className="note-annotation-fixbox">
+                    <div
+                      className="note-annotation-fixbox"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
                       {isGeneratingFix ? (
                         <div className="note-annotation-fixbox-loading" role="status" aria-live="polite">
                           Generating fix…
@@ -1293,6 +1525,8 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                           value={fixDraftMode}
                           onChange={(e) => setFixDraftMode(e.target.value as 'insert' | 'replace')}
                           disabled={isGeneratingFix}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <option value="insert">Insert after highlight</option>
                           <option value="replace">Replace highlighted text</option>
@@ -1306,6 +1540,8 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                           onChange={(e) => setFixDraftText(e.target.value)}
                           rows={4}
                           disabled={isGeneratingFix}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
                         />
                       </label>
                       <div className="note-annotation-actions">
@@ -1337,6 +1573,18 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                   <div className="note-annotation-actions">
                     <button type="button" className="note-annotation-action primary" onClick={() => openFixReview(p.issue)}>
                       Generate fix
+                    </button>
+                    <button
+                      type="button"
+                      className="note-annotation-action subtle"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        dismissFeedbackItem(p.localId)
+                      }}
+                      title="Dismiss this feedback item if it doesn't apply"
+                    >
+                      Dismiss
                     </button>
                   </div>
                 </div>
@@ -1487,6 +1735,12 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
                 </button>
               </div>
             </div>
+          </div>
+        ) : null}
+
+        {suggestionError ? (
+          <div className="suggestion-bar" role="status" aria-live="polite">
+            {suggestionError}
           </div>
         ) : null}
 

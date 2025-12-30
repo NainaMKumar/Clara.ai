@@ -1,0 +1,99 @@
+.ad-banner {
+  width: 100%;
+  background: linear-gradient(
+    135deg,
+    rgba(20, 184, 166, 0.12),
+    rgba(20, 184, 166, 0.04)
+  );
+  border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+}
+
+.ad-banner-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 20px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ad-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ad-banner-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-light);
+}
+
+.ad-banner-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-dark);
+  line-height: 1.25;
+}
+
+.ad-banner-description {
+  font-size: 0.95rem;
+  color: var(--text-light);
+  line-height: 1.3;
+}
+
+.ad-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ad-banner-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--teal);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.ad-banner-cta:hover {
+  background: var(--teal-dark);
+  transform: translateY(-1px);
+}
+
+.ad-banner-dismiss {
+  border: 0;
+  background: transparent;
+  color: rgba(31, 41, 55, 0.55);
+  font-size: 22px;
+  line-height: 1;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.ad-banner-dismiss:hover {
+  background: rgba(31, 41, 55, 0.06);
+  color: rgba(31, 41, 55, 0.8);
+}
+
+@media (max-width: 640px) {
+  .ad-banner-inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ad-banner-actions {
+    justify-content: space-between;
+  }
+}

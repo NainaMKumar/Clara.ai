@@ -15,11 +15,14 @@ interface SidebarProps {
   onSelectNote: (id: string) => void
   onNewNote: (folderId?: string) => void
   onDeleteNote: (id: string) => void
+  onMoveNote: (noteId: string, folderId?: string) => void
   onNewFolder: () => void
   onDeleteFolder: (id: string) => void
   onRenameFolder: (id: string, name: string) => void
   selectedNoteId: string | null
 }
+
+const NOTE_DRAG_MIME = 'application/x-clara-note-id'
 
 const Sidebar: React.FC<SidebarProps> = ({
   notes,
@@ -27,6 +30,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSelectNote,
   onNewNote,
   onDeleteNote,
+  onMoveNote,
   onNewFolder,
   onDeleteFolder,
   onRenameFolder,
@@ -37,6 +41,9 @@ const Sidebar: React.FC<SidebarProps> = ({
   )
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editingFolderName, setEditingFolderName] = useState('')
+  const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null)
+  const [dropOverFolderId, setDropOverFolderId] = useState<string | null>(null)
+  const [isDropOverUnfiled, setIsDropOverUnfiled] = useState(false)
 
   const toggleFolder = (id: string) => {
     setExpandedFolders(prev => {
@@ -63,11 +70,45 @@ const Sidebar: React.FC<SidebarProps> = ({
     setEditingFolderName('')
   }
 
+  const getDraggedNoteId = (dt: DataTransfer | null): string | null => {
+    if (!dt) return null
+    const fromCustom = dt.getData(NOTE_DRAG_MIME)
+    if (fromCustom) return String(fromCustom)
+    const fromText = dt.getData('text/plain')
+    return fromText ? String(fromText) : null
+  }
+
+  const requestDrop = (e: React.DragEvent) => {
+    // Required so the browser allows dropping.
+    e.preventDefault()
+    try {
+      e.dataTransfer.dropEffect = 'move'
+    } catch {
+      // ignore
+    }
+  }
+
   const renderNote = (note: Note) => (
     <div
       key={note.id}
-      className={`note-item ${selectedNoteId === note.id ? 'active' : ''}`}
+      className={`note-item ${selectedNoteId === note.id ? 'active' : ''} ${draggingNoteId === note.id ? 'dragging' : ''}`}
       onClick={() => onSelectNote(note.id)}
+      draggable
+      onDragStart={(e) => {
+        setDraggingNoteId(note.id)
+        try {
+          e.dataTransfer.setData(NOTE_DRAG_MIME, note.id)
+          e.dataTransfer.setData('text/plain', note.id)
+          e.dataTransfer.effectAllowed = 'move'
+        } catch {
+          // ignore
+        }
+      }}
+      onDragEnd={() => {
+        setDraggingNoteId(null)
+        setDropOverFolderId(null)
+        setIsDropOverUnfiled(false)
+      }}
     >
       <h3>{note.title || 'Untitled Note'}</h3>
       <p>
@@ -155,10 +196,43 @@ const Sidebar: React.FC<SidebarProps> = ({
           const folderNotes = notes.filter(note => note.folderId === folder.id)
           const isExpanded = expandedFolders.has(folder.id)
           const isEditing = editingFolderId === folder.id
+          const isDropOver = dropOverFolderId === folder.id
 
           return (
             <div key={folder.id} className="folder-section">
-              <div className="folder-header">
+              <div
+                className={`folder-header ${isDropOver ? 'drop-over' : ''}`}
+                onDragEnter={(e) => {
+                  requestDrop(e)
+                  setDropOverFolderId(folder.id)
+                  setIsDropOverUnfiled(false)
+                }}
+                onDragOver={(e) => {
+                  requestDrop(e)
+                  if (dropOverFolderId !== folder.id) setDropOverFolderId(folder.id)
+                  if (isDropOverUnfiled) setIsDropOverUnfiled(false)
+                }}
+                onDragLeave={(e) => {
+                  // Only clear when actually leaving the header element.
+                  const nextTarget = e.relatedTarget as Node | null
+                  if (!nextTarget || !e.currentTarget.contains(nextTarget)) {
+                    setDropOverFolderId((cur) => (cur === folder.id ? null : cur))
+                  }
+                }}
+                onDrop={(e) => {
+                  requestDrop(e)
+                  const noteId = getDraggedNoteId(e.dataTransfer)
+                  if (!noteId) return
+                  onMoveNote(noteId, folder.id)
+                  setExpandedFolders((prev) => {
+                    const next = new Set(prev)
+                    next.add(folder.id)
+                    return next
+                  })
+                  setDropOverFolderId(null)
+                  setIsDropOverUnfiled(false)
+                }}
+              >
                 <button
                   className="folder-expand-btn"
                   onClick={() => toggleFolder(folder.id)}
@@ -186,6 +260,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                     value={editingFolderName}
                     onChange={(e) => setEditingFolderName(e.target.value)}
                     onBlur={finishEditingFolder}
+                    onDragEnter={(e) => requestDrop(e)}
+                    onDragOver={(e) => requestDrop(e)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') finishEditingFolder()
                       if (e.key === 'Escape') {
@@ -265,7 +341,35 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* Unfiled Notes */}
         {unfiledNotes.length > 0 && (
           <div className="unfiled-section">
-            <div className="unfiled-header">Unfiled Notes</div>
+            <div
+              className={`unfiled-header ${isDropOverUnfiled ? 'drop-over' : ''}`}
+              onDragEnter={(e) => {
+                requestDrop(e)
+                setIsDropOverUnfiled(true)
+                setDropOverFolderId(null)
+              }}
+              onDragOver={(e) => {
+                requestDrop(e)
+                if (!isDropOverUnfiled) setIsDropOverUnfiled(true)
+                if (dropOverFolderId) setDropOverFolderId(null)
+              }}
+              onDragLeave={(e) => {
+                const nextTarget = e.relatedTarget as Node | null
+                if (!nextTarget || !e.currentTarget.contains(nextTarget)) {
+                  setIsDropOverUnfiled(false)
+                }
+              }}
+              onDrop={(e) => {
+                requestDrop(e)
+                const noteId = getDraggedNoteId(e.dataTransfer)
+                if (!noteId) return
+                onMoveNote(noteId, undefined)
+                setIsDropOverUnfiled(false)
+                setDropOverFolderId(null)
+              }}
+            >
+              Unfiled Notes
+            </div>
             <div className="unfiled-notes">
               {unfiledNotes.map(renderNote)}
             </div>

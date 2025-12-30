@@ -104,6 +104,17 @@ const NotesPage: React.FC = () => {
     ))
   }
 
+  const handleMoveNoteToFolder = (noteId: string, folderId?: string) => {
+    setNotes((prev) =>
+      prev.map((n) => {
+        if (n.id !== noteId) return n
+        // No-op if already in target folder
+        if ((n.folderId ?? undefined) === (folderId ?? undefined)) return n
+        return { ...n, folderId }
+      })
+    )
+  }
+
   const handleNoteUpdate = (id: string, updatedFields: Partial<Note>) => {
     const next = notes.map(note =>
       note.id === id ? { ...note, ...updatedFields, date: new Date().toLocaleDateString() } : note
@@ -199,6 +210,7 @@ const NotesPage: React.FC = () => {
         onSelectNote={handleNoteSelect}
         onNewNote={handleNewNote}
         onDeleteNote={handleDeleteNote}
+        onMoveNote={handleMoveNoteToFolder}
         onNewFolder={handleNewFolder}
         onDeleteFolder={handleDeleteFolder}
         onRenameFolder={handleRenameFolder}

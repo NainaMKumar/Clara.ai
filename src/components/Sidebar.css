@@ -66,6 +66,11 @@
   position: relative; /* For absolute positioning of delete button */
 }
 
+.note-item.dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
 .note-item:hover {
   border-color: var(--teal);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -136,6 +141,12 @@
   transition: all 0.2s ease;
 }
 
+.folder-header.drop-over {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+  background-color: #f0fdfa;
+}
+
 .folder-header:hover {
   border-color: var(--teal);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
@@ -194,6 +205,8 @@
   font-weight: 600;
   outline: none;
   background-color: white;
+  color: var(--text-dark);
+  caret-color: var(--text-dark);
 }
 
 .folder-actions {
@@ -248,6 +261,13 @@
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.unfiled-header.drop-over {
+  border-radius: 8px;
+  background-color: #f0fdfa;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+  color: var(--text-dark);
 }
 
 .unfiled-notes {

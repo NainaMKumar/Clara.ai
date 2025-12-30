@@ -273,6 +273,8 @@ export default async function handler(req: any, res: any) {
     // 3) Ask OpenAI for structured critique.
     const critiqueSystem = [
       'You critique a student note for precision and correctness.',
+      'Definition of "precision": (1) factual accuracy, and (2) clarity/explicitness in the definitions of key terms underlying the topic.',
+      'If key terms are used without clear definitions (or with ambiguous/hand-wavy definitions), flag them under kind="specificity" and propose concrete definitions.',
       'You may use the provided web sources to verify claims.',
       'Return ONLY valid JSON with this exact shape:',
       '{ "items": Array<{',

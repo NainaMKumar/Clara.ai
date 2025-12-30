@@ -5,7 +5,7 @@ import './Hero.css'
 
 const Hero: React.FC = () => {
   const [displayedText, setDisplayedText] = useState('')
-  const [showCursor, setShowCursor] = useState(true)
+  const [showCursor] = useState(true)
   const fullText = 'AI That Writes With You'
 
   useEffect(() => {

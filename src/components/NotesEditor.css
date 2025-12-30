@@ -428,21 +428,22 @@
 .note-feedback-highlight {
   border-radius: 6px;
   padding: 0.05em 0.08em;
+  color: rgba(239, 68, 68, 0.95);
 }
 
 .note-feedback-highlight--missing {
-  background: rgba(239, 68, 68, 0.18);
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
 }
 
 .note-feedback-highlight--inaccurate {
-  background: rgba(239, 68, 68, 0.18);
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
 }
 
 .note-feedback-highlight--specificity {
-  background: rgba(239, 68, 68, 0.18);
-  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
 }
 
 .note-feedback-fab {
