@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Note, Folder } from '../types'
 import './Sidebar.css'
 
@@ -20,9 +20,17 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => void
   onRenameFolder: (id: string, name: string) => void
   selectedNoteId: string | null
+  isVisible: boolean
+  isPinned: boolean
+  onTogglePin: () => void
+  onWidthChange?: (width: number) => void
 }
 
 const NOTE_DRAG_MIME = 'application/x-clara-note-id'
+
+const MIN_WIDTH = 200
+const MAX_WIDTH = 500
+const DEFAULT_WIDTH = 280
 
 const Sidebar: React.FC<SidebarProps> = ({
   notes,
@@ -34,7 +42,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   onNewFolder,
   onDeleteFolder,
   onRenameFolder,
-  selectedNoteId
+  selectedNoteId,
+  isVisible,
+  isPinned,
+  onTogglePin,
+  onWidthChange
 }) => {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     () => new Set(folders.map(f => f.id))
@@ -44,6 +56,64 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null)
   const [dropOverFolderId, setDropOverFolderId] = useState<string | null>(null)
   const [isDropOverUnfiled, setIsDropOverUnfiled] = useState(false)
+  
+  // Resizable sidebar state
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('clara_sidebar_width')
+      if (saved) {
+        const parsed = parseInt(saved, 10)
+        if (!isNaN(parsed) && parsed >= MIN_WIDTH && parsed <= MAX_WIDTH) {
+          return parsed
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_WIDTH
+  })
+  const [isResizing, setIsResizing] = useState(false)
+  const sidebarRef = useRef<HTMLDivElement>(null)
+
+  // Persist sidebar width and notify parent
+  useEffect(() => {
+    try {
+      localStorage.setItem('clara_sidebar_width', String(sidebarWidth))
+    } catch {
+      // ignore
+    }
+    onWidthChange?.(sidebarWidth)
+  }, [sidebarWidth, onWidthChange])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = e.clientX
+      setSidebarWidth(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, newWidth)))
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
 
   const toggleFolder = (id: string) => {
     setExpandedFolders(prev => {
@@ -87,6 +157,12 @@ const Sidebar: React.FC<SidebarProps> = ({
       // ignore
     }
   }
+
+  const sidebarClasses = [
+    'sidebar',
+    isVisible || isPinned ? 'visible' : 'collapsed',
+    isPinned ? 'pinned' : ''
+  ].filter(Boolean).join(' ')
 
   const renderNote = (note: Note) => (
     <div
@@ -150,9 +226,52 @@ const Sidebar: React.FC<SidebarProps> = ({
   const unfiledNotes = notes.filter(note => !note.folderId)
 
   return (
-    <div className="sidebar">
+    <div 
+      className={sidebarClasses}
+      ref={sidebarRef}
+      style={{ width: isVisible || isPinned ? sidebarWidth : undefined }}
+    >
       <div className="sidebar-header">
-        <h2>My Notes</h2>
+        <div className="sidebar-header-top">
+          <h2>My Notes</h2>
+          <button
+            className={`sidebar-pin-btn ${isPinned ? 'pinned' : ''}`}
+            onClick={onTogglePin}
+            title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+          >
+            {isPinned ? (
+              // Pinned icon (pin filled)
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76z"></path>
+              </svg>
+            ) : (
+              // Unpinned icon (pin outline)
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76z"></path>
+              </svg>
+            )}
+          </button>
+        </div>
         <div className="sidebar-header-actions">
           <button className="new-folder-btn" onClick={onNewFolder} title="New Folder">
             <svg
@@ -376,6 +495,12 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
       </div>
+      
+      {/* Resize handle */}
+      <div 
+        className={`sidebar-resize-handle ${isResizing ? 'resizing' : ''}`}
+        onMouseDown={handleMouseDown}
+      />
     </div>
   )
 }

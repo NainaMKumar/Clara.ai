@@ -1,6 +1,6 @@
 .features {
   padding: 4rem 5%;
-  background-color: var(--white);
+  background-color: var(--bg);
 }
 
 .features h2 {
@@ -19,18 +19,18 @@
 }
 
 .feature-card {
-  background: var(--white);
+  background: var(--surface);
   padding: 2rem;
   border-radius: 12px;
-  border: 2px solid rgba(20, 184, 165, 0.234);
+  border: 1px solid rgba(16, 185, 129, 0.22);
   transition: all 0.3s ease;
 }
 
 .feature-card:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 30px rgba(20, 184, 166, 0.2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), var(--glow-md);
   border-color: var(--teal);
-  background: rgba(20, 184, 166, 0.05);
+  background: rgba(16, 185, 129, 0.06);
 }
 
 .feature-icon {
@@ -43,6 +43,7 @@
   font-size: 1.5rem;
   margin-bottom: 1rem;
   color: var(--teal);
+  text-shadow: var(--glow-sm);
 }
 
 .feature-card p {

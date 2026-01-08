@@ -3,14 +3,13 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: white;
+  background-color: var(--bg);
   position: relative;
 }
 
 .editor-header {
-  padding: 2rem 3rem 1rem;
-  border-bottom: 1px solid #e0e0e0;
-  background-color: #ffffff;
+  padding: 1.5rem 3rem 0.5rem;
+  background-color: var(--bg);
 }
 
 .note-title-input {
@@ -21,21 +20,27 @@
   color: var(--text-dark);
   outline: none;
   padding: 0.5rem 0;
-  background-color: #ffffff;
+  background-color: var(--bg);
 }
 
 .note-title-input::placeholder {
-  color: #ccc;
+  color: var(--text-light);
 }
 
-.editor-toolbar {
-  padding: 1rem 3rem;
-  border-bottom: 1px solid #e0e0e0;
+.editor-topbar {
+  position: absolute;
+  top: 0.5rem;
+  right: 1.5rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  background-color: #ffffff;
+  gap: 0.5rem;
+  z-index: 20;
   flex-wrap: wrap;
+  background: var(--surface);
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .toolbar-group {
@@ -48,16 +53,16 @@
 .toolbar-separator {
   width: 1px;
   height: 28px;
-  background: #e5e7eb;
+  background: var(--border-strong);
   align-self: center;
   margin: 0 0.25rem;
 }
 
 .format-button {
   padding: 0.5rem 0.75rem;
-  background-color: #f3f4f6;
-  color: #111827;
-  border: 1px solid #e5e7eb;
+  background-color: var(--surface-2);
+  color: var(--text-dark);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
   font-weight: 700;
   font-size: 0.875rem;
@@ -72,18 +77,19 @@
 }
 
 .format-button:hover {
-  background-color: #e5e7eb;
+  background-color: var(--surface-3);
 }
 
 .format-button.active {
-  background-color: rgba(20, 184, 166, 0.16);
-  border-color: rgba(20, 184, 166, 0.55);
-  color: #0f172a;
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
+  background-color: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: var(--text-dark);
+  box-shadow: 0 0 0 3px var(--teal-glow), var(--glow-sm);
 }
 
 .format-button.active:hover {
-  background-color: rgba(20, 184, 166, 0.22);
+  background-color: rgba(16, 185, 129, 0.22);
+  box-shadow: 0 0 0 3px var(--teal-glow), var(--glow-md);
 }
 
 .format-button:active {
@@ -98,7 +104,7 @@
 
 .mode-toggle {
   display: inline-flex;
-  background-color: #e5e7eb;
+  background-color: var(--surface-2);
   border-radius: 8px;
   padding: 4px;
   margin-right: auto;
@@ -108,7 +114,7 @@
 .mode-button {
   padding: 0.5rem 1.25rem;
   background-color: transparent;
-  color: #6b7280;
+  color: var(--text-light);
   border: none;
   border-radius: 6px;
   font-weight: 600;
@@ -120,13 +126,13 @@
 }
 
 .mode-button:hover:not(.active) {
-  color: #374151;
+  color: var(--text-dark);
 }
 
 .mode-button.active {
-  background-color: white;
+  background-color: var(--surface-3);
   color: var(--teal);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
   transform: scale(1.02);
 }
 
@@ -147,12 +153,13 @@
   font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: var(--glow-sm);
 }
 
 .record-button:hover {
   background-color: var(--teal-dark);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+  box-shadow: var(--glow-lg);
 }
 
 .record-icon {
@@ -197,7 +204,7 @@
 
 .editor-content {
   flex: 1;
-  padding: 2rem 3rem;
+  padding: 1rem 3rem 2rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -220,13 +227,14 @@
 }
 
 .note-annotations-toast {
-  border: 1px solid rgba(20, 184, 166, 0.35);
-  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.1);
   border-radius: 12px;
   padding: 0.75rem 0.9rem;
-  color: #0f766e;
+  color: var(--teal);
   font-weight: 800;
   margin-bottom: 0.75rem;
+  box-shadow: var(--glow-sm);
 }
 
 .note-annotations-error {
@@ -234,37 +242,37 @@
   background: rgba(239, 68, 68, 0.08);
   border-radius: 12px;
   padding: 0.85rem 1rem;
-  color: #7f1d1d;
+  color: #fca5a5;
   margin-bottom: 0.75rem;
   white-space: pre-wrap;
 }
 
 .note-annotations-empty {
-  border: 1px dashed #e5e7eb;
+  border: 1px dashed var(--border-strong);
   border-radius: 12px;
   padding: 0.85rem 1rem;
-  color: #6b7280;
+  color: var(--text-light);
 }
 
 .note-annotation {
   position: absolute;
   right: 0;
   left: 0;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
   border-radius: 14px;
   padding: 0.85rem 0.95rem;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   outline: none;
 }
 
 .note-annotation:focus-visible {
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.18), 0 12px 28px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 4px var(--teal-glow), var(--glow-md), 0 12px 28px rgba(0, 0, 0, 0.25);
 }
 
 .note-annotation--active {
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14), 0 12px 28px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14), 0 12px 28px rgba(0, 0, 0, 0.25);
 }
 
 .note-annotation--missing {
@@ -281,62 +289,62 @@
 
 .note-annotation-title {
   font-weight: 900;
-  color: #111827;
+  color: var(--text-dark);
   margin-bottom: 0.35rem;
 }
 
 .note-annotation-quote {
   font-weight: 800;
-  color: #374151;
-  background: #f9fafb;
-  border: 1px solid #f3f4f6;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 0.55rem 0.65rem;
   margin-bottom: 0.5rem;
 }
 
 .note-annotation-issue {
-  color: #111827;
+  color: var(--text-dark);
   font-weight: 700;
   margin-bottom: 0.6rem;
 }
 
 .note-annotation-suggestion {
   margin-bottom: 0.7rem;
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid var(--border-strong);
   padding-top: 0.6rem;
 }
 
 .note-annotation-suggestion-label {
   font-weight: 900;
-  color: #374151;
+  color: var(--text-muted);
   font-size: 0.9rem;
   margin-bottom: 0.35rem;
 }
 
 .note-annotation-suggestion-text {
-  color: #111827;
-  background: #fafafa;
-  border: 1px solid #e5e7eb;
+  color: var(--text-dark);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   padding: 0.6rem 0.7rem;
   white-space: pre-wrap;
 }
 
 .note-annotation-fixbox {
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
   border-radius: 14px;
   padding: 0.75rem 0.85rem;
   margin-bottom: 0.75rem;
 }
 
 .note-annotation-fixbox-loading {
-  border: 1px solid #e5e7eb;
-  background: #fafafa;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
   border-radius: 12px;
   padding: 0.6rem 0.75rem;
-  color: #374151;
+  color: var(--text-muted);
   font-weight: 800;
   margin-bottom: 0.65rem;
 }
@@ -346,17 +354,17 @@
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--text-muted);
   margin-bottom: 0.6rem;
   font-weight: 800;
 }
 
 .note-annotation-fixbox-select {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 0.55rem 0.65rem;
-  background: #f9fafb;
-  color: #111827;
+  background: var(--surface-2);
+  color: var(--text-dark);
   outline: none;
 }
 
@@ -366,11 +374,11 @@
 }
 
 .note-annotation-fixbox-textarea {
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
   padding: 0.65rem 0.75rem;
-  background: #f9fafb;
-  color: #111827;
+  background: var(--surface-2);
+  color: var(--text-dark);
   outline: none;
   resize: vertical;
   min-height: 84px;
@@ -399,30 +407,32 @@
 .note-annotation-action.primary {
   background: var(--teal);
   color: white;
+  box-shadow: var(--glow-sm);
 }
 
 .note-annotation-action.primary:hover {
   background: var(--teal-dark);
+  box-shadow: var(--glow-md);
 }
 
 .note-annotation-action.secondary {
-  background: #f3f4f6;
-  color: #111827;
-  border-color: #e5e7eb;
+  background: var(--surface-2);
+  color: var(--text-dark);
+  border-color: var(--border-strong);
 }
 
 .note-annotation-action.secondary:hover {
-  background: #e5e7eb;
+  background: var(--surface-3);
 }
 
 .note-annotation-action.subtle {
   background: transparent;
-  color: #6b7280;
-  border-color: #e5e7eb;
+  color: var(--text-light);
+  border-color: var(--border-strong);
 }
 
 .note-annotation-action.subtle:hover {
-  background: #f9fafb;
+  background: var(--surface-2);
 }
 
 .note-feedback-highlight {
@@ -446,55 +456,29 @@
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
 }
 
-.note-feedback-fab {
-  position: fixed;
-  right: 24px;
-  bottom: 24px;
-  z-index: 60;
-  border: 1px solid rgba(20, 184, 166, 0.45);
-  background: rgba(20, 184, 166, 0.12);
-  color: #0f172a;
-  font-weight: 800;
-  border-radius: 999px;
-  padding: 0.75rem 1rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(8px);
-}
-
-.note-feedback-fab:hover:enabled {
-  background: rgba(20, 184, 166, 0.18);
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.12);
-}
-
-.note-feedback-fab:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .wysiwyg-editor-container {
   flex: 1;
   min-height: 0;
+  margin-top: 4rem;
 }
 
 .wysiwyg-editor {
   height: 100%;
   min-height: 360px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 1rem 1.25rem;
-  background: #fff;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   outline: none;
   color: var(--text-dark);
   line-height: 1.7;
-  font-size: 1rem;
+  /* Make the default note text larger than the rest of the app. */
+  font-size: 1.15rem;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 .wysiwyg-editor:focus {
-  border-color: rgba(20, 184, 166, 0.6);
-  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
+  box-shadow: none;
 }
 
 .wysiwyg-editor p {
@@ -543,18 +527,18 @@
 }
 
 .wysiwyg-editor blockquote {
-  border-left: 4px solid #e5e7eb;
+  border-left: 4px solid var(--border-strong);
   padding-left: 1rem;
   margin: 0.75rem 0;
-  color: #374151;
-  background: #fafafa;
+  color: var(--text-muted);
+  background: var(--surface-2);
   border-radius: 8px;
 }
 
 .wysiwyg-editor code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.95em;
-  background: #f3f4f6;
+  background: var(--surface-2);
   padding: 0.1em 0.25em;
   border-radius: 6px;
 }
@@ -582,7 +566,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(17, 24, 39, 0.45);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -593,17 +577,17 @@
 .modal-card {
   width: 100%;
   max-width: 520px;
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 16px;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   padding: 1.25rem;
 }
 
 .modal-title {
   font-weight: 800;
   font-size: 1.1rem;
-  color: #111827;
+  color: var(--text-dark);
   margin-bottom: 0.75rem;
 }
 
@@ -612,19 +596,19 @@
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--text-muted);
   margin-top: 0.75rem;
 }
 
 .modal-input {
   width: 100%;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 0.65rem 0.75rem;
   font-size: 0.95rem;
   outline: none;
-  background: #f9fafb;
-  color: #111827;
+  background: var(--surface-2);
+  color: var(--text-dark);
 }
 
 .modal-input:focus {
@@ -651,10 +635,12 @@
 .modal-button.primary {
   background: var(--teal);
   color: white;
+  box-shadow: var(--glow-sm);
 }
 
 .modal-button.primary:hover:enabled {
   background: var(--teal-dark);
+  box-shadow: var(--glow-md);
 }
 
 .modal-button.primary:disabled {
@@ -663,13 +649,13 @@
 }
 
 .modal-button.secondary {
-  background: #f3f4f6;
-  color: #111827;
-  border-color: #e5e7eb;
+  background: var(--surface-2);
+  color: var(--text-dark);
+  border-color: var(--border-strong);
 }
 
 .modal-button.secondary:hover {
-  background: #e5e7eb;
+  background: var(--surface-3);
 }
 
 .suggestion-bar {
@@ -677,19 +663,28 @@
   align-items: baseline;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  background: #fafafa;
+  background: var(--surface-2);
+}
+
+.suggestion-bar.floating {
+  position: absolute;
+  top: 3.5rem;
+  right: 1.5rem;
+  z-index: 19;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .suggestion-muted {
-  color: #6b7280;
+  color: var(--text-light);
   font-size: 0.9rem;
   white-space: nowrap;
 }
 
 .suggestion-text-inline {
-  color: #111827;
+  color: var(--text-dark);
   font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -697,32 +692,263 @@
 }
 
 .transcript-text {
-  color: #999;
+  color: var(--text-light);
 }
 
 .suggestion-text {
-  color: #999;
+  color: var(--text-light);
   pointer-events: none;
   user-select: none;
 }
 
 .ghost-text {
-  color: #9ca3af;
+  color: var(--text-light);
   pointer-events: none;
   display: inline;
 }
 
+/* Audio Waveform Visualization Bubble - Always visible */
+.audio-waveform-bubble {
+  position: absolute;
+  top: 0.5rem;
+  left: 1.5rem;
+  right: auto;
+  z-index: 19;
+  /* Stretch to meet the toolbar with gap on both sides */
+  width: calc(100% - 440px);
+  max-width: none;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* When recording, change border color to red */
+.audio-waveform-bubble.is-recording {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15), 0 0 0 1px rgba(239, 68, 68, 0.2);
+  animation: waveformBubbleIn 0.25s ease-out;
+}
+
+@keyframes waveformBubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.waveform-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.waveform-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #ef4444;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.waveform-saved-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #4ade80;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.waveform-check-icon {
+  width: 14px;
+  height: 14px;
+  color: #4ade80;
+}
+
+.audio-waveform-bubble.has-recordings {
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.audio-waveform-bubble.has-recordings.is-recording {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.waveform-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: waveformPulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+}
+
+@keyframes waveformPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.8);
+    box-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
+  }
+}
+
+.waveform-time {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.waveform-canvas-container {
+  flex: 1;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.waveform-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Idle state (not recording) */
+.waveform-mic-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.waveform-idle-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  height: 20px;
+  padding: 0 8px;
+}
+
+.waveform-idle-line {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 2px;
+  background: var(--border-strong);
+  border-radius: 1px;
+}
+
+.waveform-idle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  position: relative;
+  z-index: 1;
+}
+
+.waveform-idle-dot:first-child {
+  background: var(--text-muted);
+}
+
+.waveform-idle-time {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.bubble-menu {
+  z-index: 55;
+}
+
+.bubble-menu-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
+
+.bubble-menu-inner .format-button {
+  height: 32px;
+  min-width: 34px;
+  padding: 0.4rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-dark);
+}
+
+.bubble-menu-inner .format-button:hover:enabled {
+  background: var(--surface-2);
+}
+
+.bubble-menu-inner .format-button.active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: var(--glow-sm);
+  color: var(--text-dark);
+}
+
+.bubble-menu-inner .format-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.bubble-separator {
+  width: 1px;
+  height: 22px;
+  background: var(--border-strong);
+  margin: 0 0.15rem;
+}
+
 @media (max-width: 768px) {
   .editor-header {
-    padding: 1.5rem;
+    padding: 1rem 1.5rem 0.5rem;
   }
 
-  .editor-toolbar {
-    padding: 1rem 1.5rem;
+  .editor-topbar {
+    top: 0.75rem;
+    right: 1rem;
   }
 
   .editor-content {
-    padding: 1.5rem;
+    padding: 0.75rem 1.5rem 1.5rem;
   }
 
   .editor-with-annotations {
@@ -745,8 +971,14 @@
     font-size: 1.5rem;
   }
 
-  .note-feedback-fab {
-    right: 16px;
-    bottom: 16px;
+  .audio-waveform-bubble {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    width: 100%;
+    max-width: none;
+    height: 44px;
+    margin-bottom: 0.5rem;
   }
 }

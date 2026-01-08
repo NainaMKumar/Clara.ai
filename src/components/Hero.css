@@ -1,7 +1,7 @@
 .hero {
   margin-top: 80px;
   padding: 4rem 5% 3rem;
-  background: var(--white);
+  background: var(--bg);
   text-align: center;
 }
 
@@ -27,6 +27,7 @@
   font-weight: 400;
   animation: blink 1s infinite;
   margin-left: 2px;
+  text-shadow: var(--glow-sm);
 }
 
 @keyframes blink {
@@ -42,10 +43,10 @@
   font-size: 1.50rem;
   margin-bottom: 2.5rem;
   color: var(--text-light);
-  /* background-color: rgba(20, 184, 166, 0.05); */
+  background-color: rgba(255, 255, 255, 0.03);
   padding: 2rem;
   border-radius: 12px;
-  /* border: 1px solid rgba(20, 184, 166, 0.2); */
+  border: 1px solid var(--border);
 }
 
 .hero-buttons {
@@ -66,12 +67,13 @@
   cursor: pointer;
   transition: all 0.3s ease;
   text-decoration: none;
+  box-shadow: var(--glow-sm);
 }
 
 .btn-primary:hover {
   background-color: var(--teal-dark);
   transform: translateY(-3px);
-  box-shadow: 0 12px 30px rgba(20, 184, 166, 0.4);
+  box-shadow: var(--glow-lg);
 }
 
 .btn-secondary {
@@ -84,12 +86,13 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
+  box-shadow: 0 0 8px var(--teal-glow);
 }
 
 .btn-secondary:hover {
-  background-color: rgba(20, 184, 166, 0.1);
+  background-color: rgba(16, 185, 129, 0.1);
   border-color: var(--teal-dark);
-  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.2);
+  box-shadow: var(--glow-md);
 }
 
 @media (max-width: 768px) {

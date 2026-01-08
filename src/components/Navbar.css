@@ -1,12 +1,13 @@
 .navbar {
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: rgba(0, 0, 0, 0.85);
   padding: 1rem 2%;
   position: fixed;
   width: 100%;
   top: 0;
   z-index: 1000;
   backdrop-filter: blur(10px);
-  border-bottom: 3px solid rgba(20, 184, 166, 0.3);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
 .navbar-container {
@@ -24,11 +25,13 @@
   font-weight: bold;
   color: var(--teal);
   text-decoration: none;
+  text-shadow: var(--glow-sm);
+  transition: text-shadow 0.3s ease;
 }
-/* .logo:hover{
-  color: var(--teal);
-} */
 
+.logo:hover {
+  text-shadow: var(--glow-md);
+}
 
 .nav-links {
   display: flex;
@@ -40,20 +43,23 @@
 .nav-links a {
   color: var(--text-dark);
   text-decoration: none;
-  transition: color 0.3s;
+  transition: all 0.3s ease;
   font-size: 1.25rem;
 }
 
 .nav-links a:hover {
   color: var(--teal);
+  text-shadow: var(--glow-sm);
 }
 
 .nav-links .cta-button {
   color: white;
+  text-shadow: none;
 }
 
 .nav-links .cta-button:hover {
   color: white;
+  text-shadow: none;
 }
 
 .cta-button {
@@ -64,12 +70,13 @@
   font-weight: 600;
   font-size: 0.95rem;
   transition: all 0.3s ease;
+  box-shadow: var(--glow-sm);
 }
 
 .cta-button:hover {
   background-color: var(--teal-dark);
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.3);
+  box-shadow: var(--glow-lg);
 }
 
 @media (max-width: 768px) {

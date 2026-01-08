@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
+import { BubbleMenu } from '@tiptap/react/menus';
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -8,7 +9,7 @@ import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import './NotesEditor.css';
 
-import type { Note } from '../types';
+import type { Note, RecordedWaveform } from '../types';
 import type {
   NoteFeedbackFixContext,
   NoteFeedbackFixResponse,
@@ -19,6 +20,7 @@ import type {
 type NotesEditorProps = {
   note: Note;
   onUpdate: (fields: Partial<Note>) => void;
+  isRagSidebarOpen?: boolean;
 };
 
 type TrackedIssue = NoteFeedbackItem & {
@@ -426,7 +428,7 @@ function toEditorHtml(content: string) {
   return `<p>${escapeHtml(content).replace(/\n/g, '<br />')}</p>`;
 }
 
-const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
+const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate, isRagSidebarOpen }) => {
   const [title, setTitle] = useState(note.title);
   const [isRecording, setIsRecording] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -435,6 +437,14 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const deepgramSocketRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  // Audio visualization refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const waveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const [waveformData, setWaveformData] = useState<number[]>([]);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingStartTimeRef = useRef<number>(0);
   // Ref to track accumulated final transcripts (avoids stale closure issues)
   const accumulatedTranscriptRef = useRef<string>('');
   // Track the latest audio timestamp from Deepgram (for filtering old buffered results)
@@ -1177,6 +1187,17 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     return () => sc.removeEventListener('scroll', onScroll);
   }, [editor]);
 
+  // Listen for feedback request from parent component
+  useEffect(() => {
+    const handleFeedbackRequest = () => {
+      if (!isLoadingFeedback) {
+        void fetchNoteFeedback();
+      }
+    };
+    window.addEventListener('clara:request-feedback', handleFeedbackRequest);
+    return () => window.removeEventListener('clara:request-feedback', handleFeedbackRequest);
+  }, [isLoadingFeedback]);
+
   // After pins render (and whenever the fix editor opens), measure real card heights and reflow.
   useEffect(() => {
     if (!hasRequestedFeedback) return;
@@ -1213,6 +1234,228 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annotationPins, hasRequestedFeedback]);
+
+  // Audio waveform visualization - shows entire recording, compressing as it grows
+  const drawWaveform = () => {
+    const analyser = analyserRef.current;
+    if (!analyser) {
+      animationFrameRef.current = requestAnimationFrame(drawWaveform);
+      return;
+    }
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteTimeDomainData(dataArray);
+
+    // Calculate RMS amplitude for this frame
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      const normalized = (dataArray[i] - 128) / 128;
+      sum += normalized * normalized;
+    }
+    const rms = Math.sqrt(sum / bufferLength);
+    const amplitude = Math.min(1, rms * 5); // Scale up for visibility
+
+    // Add new amplitude to waveform history
+    // Downsample when data gets very large to prevent memory issues
+    setWaveformData(prev => {
+      const newData = [...prev, amplitude];
+      // If we have too many samples, downsample by averaging pairs
+      const maxSamples = 2000;
+      if (newData.length > maxSamples) {
+        const downsampled: number[] = [];
+        for (let i = 0; i < newData.length; i += 2) {
+          const avg = (newData[i] + (newData[i + 1] ?? newData[i])) / 2;
+          downsampled.push(avg);
+        }
+        return downsampled;
+      }
+      return newData;
+    });
+
+    // Update recording duration
+    if (recordingStartTimeRef.current > 0) {
+      const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
+      setRecordingDuration(elapsed);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(drawWaveform);
+  };
+
+  // Combine saved waveforms + current recording for display
+  const savedWaveforms = note.waveforms || [];
+  const allWaveformSegments = useMemo(() => {
+    const segments: { data: number[]; isCurrent: boolean }[] = [];
+    // Add all saved waveforms
+    for (const wf of savedWaveforms) {
+      segments.push({ data: wf.data, isCurrent: false });
+    }
+    // Add current recording if active
+    if (isRecording && waveformData.length > 0) {
+      segments.push({ data: waveformData, isCurrent: true });
+    }
+    return segments;
+  }, [savedWaveforms, isRecording, waveformData]);
+
+  // Calculate total data points across all segments
+  const totalDataPoints = useMemo(() => {
+    return allWaveformSegments.reduce((sum, seg) => sum + seg.data.length, 0);
+  }, [allWaveformSegments]);
+
+  // Separate effect to draw all waveforms on canvas
+  useEffect(() => {
+    const canvas = waveformCanvasRef.current;
+    if (!canvas) return;
+    
+    // Only draw if there's data to show
+    const hasData = allWaveformSegments.length > 0 && totalDataPoints > 0;
+    if (!hasData && !isRecording) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerY = height / 2;
+    const padding = 4;
+    const availableWidth = width - padding * 2;
+    const separatorWidth = 3; // Width for vertical separators
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw center line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding, centerY);
+    ctx.lineTo(width - padding, centerY);
+    ctx.stroke();
+
+    if (!hasData) return;
+
+    // Calculate space needed for separators
+    const numSeparators = Math.max(0, allWaveformSegments.length - 1);
+    const totalSeparatorWidth = numSeparators * separatorWidth;
+    const waveformWidth = availableWidth - totalSeparatorWidth;
+
+    // Calculate bar width based on total data points
+    const gap = 1;
+    let barWidth = (waveformWidth - (totalDataPoints - 1) * gap) / totalDataPoints;
+    
+    // Clamp bar width
+    const minBarWidth = 1;
+    const maxBarWidth = 4;
+    barWidth = Math.max(minBarWidth, Math.min(maxBarWidth, barWidth));
+    
+    const stepSize = barWidth + gap;
+    const totalUsedWidth = totalDataPoints * stepSize - gap + totalSeparatorWidth;
+    const scale = totalUsedWidth > availableWidth ? availableWidth / totalUsedWidth : 1;
+
+    let currentX = padding;
+    
+    // Draw each segment
+    allWaveformSegments.forEach((segment, segIndex) => {
+      const { data, isCurrent } = segment;
+      
+      // Draw separator before this segment (except for first)
+      if (segIndex > 0) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(currentX + separatorWidth / 2, padding + 2);
+        ctx.lineTo(currentX + separatorWidth / 2, height - padding - 2);
+        ctx.stroke();
+        currentX += separatorWidth * scale;
+      }
+      
+      // Draw waveform bars for this segment
+      data.forEach((amplitude) => {
+        const actualBarWidth = Math.max(1, barWidth * scale);
+        const barHeight = Math.max(2, amplitude * (height - padding * 2));
+        const y = centerY - barHeight / 2;
+
+        // Different color for saved vs current recording
+        if (isCurrent) {
+          const intensity = 0.6 + amplitude * 0.4;
+          ctx.fillStyle = `rgba(239, 68, 68, ${intensity})`; // Red for current
+        } else {
+          const intensity = 0.5 + amplitude * 0.3;
+          ctx.fillStyle = `rgba(74, 222, 128, ${intensity})`; // Green for saved
+        }
+        
+        ctx.beginPath();
+        ctx.roundRect(currentX, y, actualBarWidth, barHeight, actualBarWidth > 2 ? 1 : 0);
+        ctx.fill();
+        
+        currentX += stepSize * scale;
+      });
+    });
+
+    // Draw playhead at the end if recording
+    if (isRecording) {
+      const playheadX = Math.min(currentX, width - padding);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(playheadX, padding);
+      ctx.lineTo(playheadX, height - padding);
+      ctx.stroke();
+
+      // Small glow effect at playhead
+      const glowGradient = ctx.createLinearGradient(playheadX - 20, 0, playheadX, 0);
+      glowGradient.addColorStop(0, 'rgba(239, 68, 68, 0)');
+      glowGradient.addColorStop(1, 'rgba(239, 68, 68, 0.3)');
+      ctx.fillStyle = glowGradient;
+      ctx.fillRect(Math.max(padding, playheadX - 20), 0, 20, height);
+    }
+  }, [allWaveformSegments, totalDataPoints, isRecording]);
+
+  const startAudioVisualization = (stream: MediaStream) => {
+    try {
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.8;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+      setWaveformData([]);
+      recordingStartTimeRef.current = Date.now();
+      setRecordingDuration(0);
+
+      // Start visualization loop
+      drawWaveform();
+    } catch (e) {
+      console.error('Failed to start audio visualization:', e);
+    }
+  };
+
+  const stopAudioVisualization = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch {
+        // ignore
+      }
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setWaveformData([]);
+    recordingStartTimeRef.current = 0;
+    setRecordingDuration(0);
+  };
 
   const handleRecordingToggle = () => {
     if (isRecording || isConnecting) {
@@ -1392,6 +1635,8 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
     }
 
     mediaStreamRef.current = stream;
+    // Start audio visualization
+    startAudioVisualization(stream);
     const audioTrack = stream.getAudioTracks()[0];
 
     // Warn if the audio track is muted or looks like a virtual device
@@ -1977,6 +2222,21 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const stopRecording = () => {
     setIsConnecting(false);
     setIsRecording(false);
+    
+    // Save the waveform data before clearing it
+    if (waveformData.length > 0 && recordingDuration > 0) {
+      const newWaveform: RecordedWaveform = {
+        id: Date.now().toString(),
+        data: [...waveformData],
+        duration: recordingDuration,
+        recordedAt: new Date().toISOString(),
+      };
+      const existingWaveforms = note.waveforms || [];
+      onUpdate({ waveforms: [...existingWaveforms, newWaveform] });
+    }
+    
+    // Stop audio visualization
+    stopAudioVisualization();
     if (mediaRecorderRef) {
       mediaRecorderRef.current?.stop();
       mediaRecorderRef.current = null;
@@ -2013,6 +2273,11 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   );
   const fmtClass = (active: boolean) =>
     `format-button${active ? ' active' : ''}`;
+
+  const preventMenuMouseDown = (e: React.MouseEvent) => {
+    // Prevent ProseMirror from losing selection/focus when clicking the bubble menu.
+    e.preventDefault();
+  };
 
   const openLinkModal = () => {
     if (!editor) return;
@@ -2094,225 +2359,292 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
           placeholder='Note Title'
         />
       </div>
-      <div className='editor-toolbar'>
-        <div className='toolbar-group' aria-label='Markdown formatting'>
-          <button
-            className={fmtClass(!!editor?.isActive('bold'))}
-            onClick={() => editor?.chain().focus().toggleBold().run()}
-            title='Bold'
-            type='button'
-            aria-label='Bold'
-            disabled={!canFormat}
-          >
-            B
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('italic'))}
-            onClick={() => editor?.chain().focus().toggleItalic().run()}
-            title='Italic'
-            type='button'
-            aria-label='Italic'
-            disabled={!canFormat}
-          >
-            I
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('strike'))}
-            onClick={() => editor?.chain().focus().toggleStrike().run()}
-            title='Strikethrough'
-            type='button'
-            aria-label='Strikethrough'
-            disabled={!canFormat}
-          >
-            S
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('code'))}
-            onClick={() => editor?.chain().focus().toggleCode().run()}
-            title='Inline code'
-            type='button'
-            aria-label='Inline code'
-            disabled={!canFormat}
-          >
-            <IconCode />
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('codeBlock'))}
-            onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-            title='Code block'
-            type='button'
-            aria-label='Code block'
-            disabled={!canFormat}
-          >
-            <IconCodeBlock />
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('blockquote'))}
-            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-            title='Blockquote'
-            type='button'
-            aria-label='Blockquote'
-            disabled={!canFormat}
-          >
-            <IconQuote />
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('bulletList'))}
-            onClick={() => editor?.chain().focus().toggleBulletList().run()}
-            title='Bullet list'
-            type='button'
-            aria-label='Bullet list'
-            disabled={!canFormat}
-          >
-            •
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('orderedList'))}
-            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-            title='Numbered list'
-            type='button'
-            aria-label='Numbered list'
-            disabled={!canFormat}
-          >
-            1.
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('link'))}
-            onClick={openLinkModal}
-            title='Link'
-            type='button'
-            aria-label='Insert link'
-            disabled={!canFormat}
-          >
-            <IconLink />
-          </button>
-          <button
-            className={fmtClass(false)}
-            onClick={() => {
-              openImageModal();
-            }}
-            title='Image'
-            type='button'
-            aria-label='Insert image'
-            disabled={!canFormat}
-          >
-            <IconImage />
-          </button>
-        </div>
-
-        <div
-          className='toolbar-separator'
-          role='separator'
-          aria-orientation='vertical'
-        />
-
-        <div className='toolbar-group' aria-label='Headings'>
-          <button
-            className={fmtClass(!!editor?.isActive('heading', { level: 1 }))}
-            onClick={() =>
-              editor?.chain().focus().toggleHeading({ level: 1 }).run()
-            }
-            title='Heading 1'
-            type='button'
-            aria-label='Heading 1'
-            disabled={!canFormat}
-          >
-            H1
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('heading', { level: 2 }))}
-            onClick={() =>
-              editor?.chain().focus().toggleHeading({ level: 2 }).run()
-            }
-            title='Heading 2'
-            type='button'
-            aria-label='Heading 2'
-            disabled={!canFormat}
-          >
-            H2
-          </button>
-          <button
-            className={fmtClass(!!editor?.isActive('heading', { level: 3 }))}
-            onClick={() =>
-              editor?.chain().focus().toggleHeading({ level: 3 }).run()
-            }
-            title='Heading 3'
-            type='button'
-            aria-label='Heading 3'
-            disabled={!canFormat}
-          >
-            H3
-          </button>
-        </div>
-
-        <div
-          className='toolbar-separator'
-          role='separator'
-          aria-orientation='vertical'
-        />
-
-        <div className='toolbar-group' aria-label='AI modes'>
-          <button
-            className={`mode-button ${mode === 'autocomplete' ? 'active' : ''}`}
-            onClick={() => {
-              setMode('autocomplete');
-              setSuggestion('');
-              setSuggestionError('');
-            }}
-            title='Autocomplete mode'
-            type='button'
-          >
-            Autocomplete
-          </button>
-
-          <button
-            className={`mode-button ${mode === 'suggestion' ? 'active' : ''}`}
-            onClick={() => {
-              setMode('suggestion');
-              setSuggestion('');
-              setSuggestionError('');
-            }}
-            title='suggestion mode'
-            type='button'
-          >
-            Suggestion
-          </button>
-        </div>
-
-        <div
-          className='toolbar-separator'
-          role='separator'
-          aria-orientation='vertical'
-        />
-
-        <div className='toolbar-group' aria-label='Recording'>
-          <button
-            className={`record-button ${isRecording ? 'recording' : ''}`}
-            onClick={handleRecordingToggle}
-            title={
-              isRecording || isConnecting ? 'Stop Recording' : 'Start Recording'
-            }
-            type='button'
-          >
-            <span className='record-icon'></span>
-            {isConnecting
-              ? 'Connecting…'
-              : isRecording
-              ? 'Stop Recording'
-              : 'Start Recording'}
-          </button>
-        </div>
-      </div>
-      {recordingError ? (
-        <div className='suggestion-bar' role='status' aria-live='polite'>
-          {recordingError}
-        </div>
-      ) : isRecording && mode === 'suggestion' && transcript.trim() ? (
-        <div className='suggestion-bar' role='status' aria-live='polite'>
-          Live transcript: “{transcript.slice(-240)}”
-        </div>
-      ) : null}
       <div className='editor-content' ref={editorScrollRef}>
+        <div className='editor-topbar'>
+          <div className='toolbar-group' aria-label='AI modes'>
+            <button
+              className={`mode-button ${mode === 'autocomplete' ? 'active' : ''}`}
+              onClick={() => {
+                setMode('autocomplete');
+                setSuggestion('');
+                setSuggestionError('');
+              }}
+              title='Autocomplete mode'
+              type='button'
+            >
+              Autocomplete
+            </button>
+
+            <button
+              className={`mode-button ${mode === 'suggestion' ? 'active' : ''}`}
+              onClick={() => {
+                setMode('suggestion');
+                setSuggestion('');
+                setSuggestionError('');
+              }}
+              title='suggestion mode'
+              type='button'
+            >
+              Suggestion
+            </button>
+          </div>
+
+          <div className='toolbar-group' aria-label='Recording'>
+            <button
+              className={`record-button ${isRecording ? 'recording' : ''}`}
+              onClick={handleRecordingToggle}
+              title={
+                isRecording || isConnecting ? 'Stop Recording' : 'Start Recording'
+              }
+              type='button'
+            >
+              <span className='record-icon'></span>
+              {isConnecting
+                ? 'Connecting…'
+                : isRecording
+                ? 'Stop Recording'
+                : 'Start Recording'}
+            </button>
+          </div>
+        </div>
+
+        {/* Audio Waveform Visualization Bubble - Always visible */}
+        <div className={`audio-waveform-bubble ${isRecording ? 'is-recording' : ''} ${savedWaveforms.length > 0 ? 'has-recordings' : ''}`} aria-label='Audio waveform visualization'>
+          {/* Show header with recording info */}
+          <div className='waveform-header'>
+            {isRecording ? (
+              <span className='waveform-indicator'>
+                <span className='waveform-dot'></span>
+                REC
+              </span>
+            ) : savedWaveforms.length > 0 ? (
+              <span className='waveform-saved-indicator'>
+                <svg className='waveform-check-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+                  <polyline points='20 6 9 17 4 12'></polyline>
+                </svg>
+                {savedWaveforms.length} saved
+              </span>
+            ) : (
+              <svg className='waveform-mic-icon' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+                <path d='M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z' />
+                <path d='M19 10v2a7 7 0 0 1-14 0v-2' />
+                <line x1='12' y1='19' x2='12' y2='23' />
+                <line x1='8' y1='23' x2='16' y2='23' />
+              </svg>
+            )}
+            <span className='waveform-time'>
+              {(() => {
+                const savedDuration = savedWaveforms.reduce((sum, wf) => sum + wf.duration, 0);
+                const totalDuration = savedDuration + (isRecording ? recordingDuration : 0);
+                const mins = Math.floor(totalDuration / 60);
+                const secs = totalDuration % 60;
+                return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+              })()}
+            </span>
+          </div>
+          
+          {/* Show canvas if we have any waveform data */}
+          {(savedWaveforms.length > 0 || isRecording) ? (
+            <div className='waveform-canvas-container'>
+              <canvas
+                ref={waveformCanvasRef}
+                className='waveform-canvas'
+                width={600}
+                height={40}
+              />
+            </div>
+          ) : (
+            <div className='waveform-idle-track'>
+              <div className='waveform-idle-line'></div>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className='waveform-idle-dot' />
+              ))}
+            </div>
+          )}
+        </div>
+        {recordingError ? (
+          <div className='suggestion-bar floating' role='status' aria-live='polite'>
+            {recordingError}
+          </div>
+        ) : isRecording && mode === 'suggestion' && transcript.trim() ? (
+          <div className='suggestion-bar floating' role='status' aria-live='polite'>
+            Live transcript: "{transcript.slice(-240)}"
+          </div>
+        ) : null}
+        {editor ? (
+          <BubbleMenu
+            editor={editor}
+            className='bubble-menu'
+            options={{
+              placement: 'top',
+              // Keep the menu snug to the selection (no extra gap).
+              offset: 0,
+            }}
+            shouldShow={({ editor, state }) => {
+              if (!editor.isEditable) return false;
+              if (!editor.isFocused) return false;
+              if (state.selection.empty) return false;
+              if (isLinkModalOpen || isImageModalOpen) return false;
+              return true;
+            }}
+          >
+            <div className='bubble-menu-inner' aria-label='Formatting'>
+              <button
+                className={fmtClass(!!editor?.isActive('bold'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleBold().run()}
+                title='Bold'
+                type='button'
+                aria-label='Bold'
+                disabled={!canFormat}
+              >
+                B
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('italic'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleItalic().run()}
+                title='Italic'
+                type='button'
+                aria-label='Italic'
+                disabled={!canFormat}
+              >
+                I
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('strike'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleStrike().run()}
+                title='Strikethrough'
+                type='button'
+                aria-label='Strikethrough'
+                disabled={!canFormat}
+              >
+                S
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('code'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleCode().run()}
+                title='Inline code'
+                type='button'
+                aria-label='Inline code'
+                disabled={!canFormat}
+              >
+                <IconCode />
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('link'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={openLinkModal}
+                title='Link'
+                type='button'
+                aria-label='Insert link'
+                disabled={!canFormat}
+              >
+                <IconLink />
+              </button>
+              <div className='bubble-separator' role='separator' />
+              <button
+                className={fmtClass(!!editor?.isActive('heading', { level: 1 }))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() =>
+                  editor?.chain().focus().toggleHeading({ level: 1 }).run()
+                }
+                title='Heading 1'
+                type='button'
+                aria-label='Heading 1'
+                disabled={!canFormat}
+              >
+                H1
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('heading', { level: 2 }))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() =>
+                  editor?.chain().focus().toggleHeading({ level: 2 }).run()
+                }
+                title='Heading 2'
+                type='button'
+                aria-label='Heading 2'
+                disabled={!canFormat}
+              >
+                H2
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('heading', { level: 3 }))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() =>
+                  editor?.chain().focus().toggleHeading({ level: 3 }).run()
+                }
+                title='Heading 3'
+                type='button'
+                aria-label='Heading 3'
+                disabled={!canFormat}
+              >
+                H3
+              </button>
+              <div className='bubble-separator' role='separator' />
+              <button
+                className={fmtClass(!!editor?.isActive('bulletList'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                title='Bullet list'
+                type='button'
+                aria-label='Bullet list'
+                disabled={!canFormat}
+              >
+                •
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('orderedList'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                title='Numbered list'
+                type='button'
+                aria-label='Numbered list'
+                disabled={!canFormat}
+              >
+                1.
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('blockquote'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+                title='Blockquote'
+                type='button'
+                aria-label='Blockquote'
+                disabled={!canFormat}
+              >
+                <IconQuote />
+              </button>
+              <button
+                className={fmtClass(!!editor?.isActive('codeBlock'))}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+                title='Code block'
+                type='button'
+                aria-label='Code block'
+                disabled={!canFormat}
+              >
+                <IconCodeBlock />
+              </button>
+              <button
+                className={fmtClass(false)}
+                onMouseDown={preventMenuMouseDown}
+                onClick={() => {
+                  openImageModal();
+                }}
+                title='Image'
+                type='button'
+                aria-label='Insert image'
+                disabled={!canFormat}
+              >
+                <IconImage />
+              </button>
+            </div>
+          </BubbleMenu>
+        ) : null}
         {(() => {
           const unresolvedCount = trackedIssues.filter(
             (x) => !x.resolved
@@ -2521,17 +2853,6 @@ const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
             </div>
           );
         })()}
-
-        <button
-          type='button'
-          className='note-feedback-fab'
-          onClick={() => void fetchNoteFeedback()}
-          disabled={!canFormat || isLoadingFeedback}
-          title='Get feedback on this note'
-          aria-label='Get feedback on this note'
-        >
-          {isLoadingFeedback ? 'Checking…' : 'Note feedback'}
-        </button>
 
         {isLinkModalOpen ? (
           <div

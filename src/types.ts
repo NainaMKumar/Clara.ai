@@ -5,12 +5,20 @@ export interface Folder {
   createdDate: string
 }
 
+export interface RecordedWaveform {
+  id: string
+  data: number[]
+  duration: number // in seconds
+  recordedAt: string // ISO timestamp
+}
+
 export interface Note {
   id: string
   title: string
   content: string
   date: string
   folderId?: string
+  waveforms?: RecordedWaveform[]
 }
 
 export type NoteFeedbackKind = 'missing' | 'inaccurate' | 'specificity'

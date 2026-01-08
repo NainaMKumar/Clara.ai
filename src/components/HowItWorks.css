@@ -1,6 +1,6 @@
 .how-it-works {
   padding: 5rem 5%;
-  background: var(--white);
+  background: var(--bg);
 }
 
 .how-it-works h2 {
@@ -19,17 +19,17 @@
 }
 
 .step {
-  background: white;
+  background: var(--surface);
   padding: 3rem;
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
   transition: all 0.3s ease;
-  border: 2px solid #f3f4f6;
+  border: 2px solid var(--border-strong);
 }
 
 .step:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), var(--glow-md);
   border-color: var(--teal);
 }
 
@@ -45,6 +45,7 @@
   font-size: 2rem;
   font-weight: bold;
   margin-bottom: 1.5rem;
+  box-shadow: var(--glow-md);
 }
 
 .step-content h3 {
