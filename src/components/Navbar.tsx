@@ -7,7 +7,8 @@ const Navbar: React.FC = () => {
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/" className="logo">
-          Clara<span>.ai</span>
+          {/* Clara<span>.ai</span> */}
+          Clara
         </Link>
         <ul className="nav-links">
           <li><a href="#features">Features</a></li>

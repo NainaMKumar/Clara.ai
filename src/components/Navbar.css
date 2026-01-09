@@ -1,12 +1,12 @@
 .navbar {
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: black;
   padding: 1rem 2%;
   position: fixed;
   width: 100%;
   top: 0;
   z-index: 1000;
   backdrop-filter: blur(10px);
-  border-bottom: 3px solid rgba(20, 184, 166, 0.3);
+  border-bottom: none;
 }
 
 .navbar-container {
@@ -20,9 +20,9 @@
 }
 
 .logo {
-  font-size: 2.0rem;
+  font-size: 2.25rem;
   font-weight: bold;
-  color: var(--teal);
+  color: white;
   text-decoration: none;
 }
 /* .logo:hover{
@@ -38,18 +38,30 @@
 }
 
 .nav-links a {
-  color: var(--text-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px; /* same width for all boxes — change to suit */
+  box-sizing: border-box;
+  color: white;
   text-decoration: none;
-  transition: color 0.3s;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
+  border-radius: 12px;
+  padding: 10px;
+  border: 2px solid rgba(20, 184, 165, 0.234);
+  transition: all 0.3s ease;
+  border-color: var(--text-light);
+  text-align: center;
 }
 
 .nav-links a:hover {
-  color: var(--teal);
+  border-color: var(--teal);
+  transform: translateY(-8px);
 }
 
 .nav-links .cta-button {
   color: white;
+  border: 2px solid var(--text-light);
 }
 
 .nav-links .cta-button:hover {
@@ -68,7 +80,7 @@
 
 .cta-button:hover {
   background-color: var(--teal-dark);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: 0 8px 20px rgba(20, 184, 166, 0.3);
 }
 

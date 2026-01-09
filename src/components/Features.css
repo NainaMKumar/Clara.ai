@@ -1,13 +1,13 @@
 .features {
   padding: 4rem 5%;
-  background-color: var(--white);
+  background-color: black;
 }
 
 .features h2 {
   text-align: center;
   font-size: 2rem;
   margin-bottom: 3rem;
-  color: var(--text-dark);
+  color: white;
 }
 
 .features-grid {
@@ -19,11 +19,12 @@
 }
 
 .feature-card {
-  background: var(--white);
+  background: black;
   padding: 2rem;
   border-radius: 12px;
   border: 2px solid rgba(20, 184, 165, 0.234);
   transition: all 0.3s ease;
+  border-color: var(--teal);
 }
 
 .feature-card:hover {
@@ -46,6 +47,6 @@
 }
 
 .feature-card p {
-  color: var(--text-light);
+  color: rgb(221, 220, 220);
   font-size: 1.25rem;
 }

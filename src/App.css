@@ -1,3 +1,5 @@
 .app {
   min-height: 100vh;
+  /* Ensure page background matches hero/navbar so no white stripe shows */
+  background-color: black;
 }

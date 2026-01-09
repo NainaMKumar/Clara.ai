@@ -1,5 +1,9 @@
 .founder-content {
     text-align: center;
+    background-color: black;
+}
+h1 {
+    color: white;
 }
 
 .uiuc {
@@ -34,17 +38,20 @@
 .founder-major {
     font-size: 1.3rem;
     font-weight: 600;
-    color: var(--text-light);
+    color: rgb(221, 220, 220);
     margin-bottom: 1.5rem;
 }
 
 .founder-why {
-    font-size: 1.2rem;
-    color: var(--text-light);
+    font-size: 1.25rem;
+    color: rgb(221, 220, 220);
     background-color: rgba(20, 184, 166, 0.05);
     padding: 2rem;
     border-radius: 12px;
-    border: 1px solid rgba(20, 184, 166, 0.2);
+    /* border: 1px solid rgba(20, 184, 166, 0.2); */
+    border: 2px solid rgba(20, 184, 165, 0.234);
+    transition: all 0.3s ease;
+    border-color: var(--teal);
     text-align: left;
     line-height: 1.6;
     flex: 1;

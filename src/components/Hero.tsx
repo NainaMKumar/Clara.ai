@@ -49,12 +49,21 @@ const Hero: React.FC = () => {
         </h1>
         <p>
           Clara is a real time, collaborative AI for notetaking. 
-          No recording, no uploads, no AI-generated summaries. 
+          No uploads, no AI-generated summaries. 
           Just intelligent assistance as you think, type, and learn.
         </p>
         <div className="hero-buttons">
           <Link to="/notes" className="btn-primary">Start Free Trial</Link>
-          <button className="btn-secondary">Watch Demo</button>
+            <a
+            className="btn-secondary"
+            href="https://www.youtube.com/watch?v=EpXvKSLztG0"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Watch demo on YouTube"
+            style={{ textDecoration: 'none' }}
+            >
+            Watch Demo
+            </a>
         </div>
       </div>
       <DemoVisual />
