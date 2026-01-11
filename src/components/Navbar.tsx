@@ -1,14 +1,14 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import './Navbar.css'
+import clara_logo from './logo_design.png'
 
 const Navbar: React.FC = () => {
   return (
     <nav className="navbar">
       <div className="navbar-container">
         <Link to="/" className="logo">
-          {/* Clara<span>.ai</span> */}
-          Clara
+          <img className="clara-logo" src={clara_logo} alt="Clara Logo" />
         </Link>
         <ul className="nav-links">
           <li><a href="#features">Features</a></li>

@@ -18,7 +18,10 @@
   padding-left: 10rem;
   padding-right: 15rem;
 }
-
+.clara-logo {
+  height: 90px;
+  width: auto;
+}
 .logo {
   font-size: 2.25rem;
   font-weight: bold;
