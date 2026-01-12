@@ -17,14 +17,14 @@
   border: none;
   font-size: 2rem;
   font-weight: 700;
-  color: var(--text-dark);
+  color: var(--text-primary);
   outline: none;
   padding: 0.5rem 0;
   background-color: var(--bg);
 }
 
 .note-title-input::placeholder {
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .editor-topbar {
@@ -36,7 +36,7 @@
   gap: 0.5rem;
   z-index: 20;
   flex-wrap: wrap;
-  background: var(--surface);
+  background: #252D3A;
   padding: 0.5rem 0.75rem;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -61,7 +61,7 @@
 .format-button {
   padding: 0.5rem 0.75rem;
   background-color: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   font-weight: 700;
@@ -83,7 +83,7 @@
 .format-button.active {
   background-color: rgba(16, 185, 129, 0.16);
   border-color: rgba(16, 185, 129, 0.55);
-  color: var(--text-dark);
+  color: var(--text-primary);
   box-shadow: 0 0 0 3px var(--teal-glow), var(--glow-sm);
 }
 
@@ -114,7 +114,7 @@
 .mode-button {
   padding: 0.5rem 1.25rem;
   background-color: transparent;
-  color: var(--text-light);
+  color: var(--text-secondary);
   border: none;
   border-radius: 6px;
   font-weight: 600;
@@ -126,7 +126,7 @@
 }
 
 .mode-button:hover:not(.active) {
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
 
 .mode-button.active {
@@ -251,7 +251,7 @@
   border: 1px dashed var(--border-strong);
   border-radius: 12px;
   padding: 0.85rem 1rem;
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .note-annotation {
@@ -289,13 +289,13 @@
 
 .note-annotation-title {
   font-weight: 900;
-  color: var(--text-dark);
+  color: var(--text-primary);
   margin-bottom: 0.35rem;
 }
 
 .note-annotation-quote {
   font-weight: 800;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
@@ -304,7 +304,7 @@
 }
 
 .note-annotation-issue {
-  color: var(--text-dark);
+  color: var(--text-primary);
   font-weight: 700;
   margin-bottom: 0.6rem;
 }
@@ -317,13 +317,13 @@
 
 .note-annotation-suggestion-label {
   font-weight: 900;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin-bottom: 0.35rem;
 }
 
 .note-annotation-suggestion-text {
-  color: var(--text-dark);
+  color: var(--text-primary);
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
@@ -344,7 +344,7 @@
   background: var(--surface-2);
   border-radius: 12px;
   padding: 0.6rem 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-weight: 800;
   margin-bottom: 0.65rem;
 }
@@ -354,7 +354,7 @@
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-bottom: 0.6rem;
   font-weight: 800;
 }
@@ -364,7 +364,7 @@
   border-radius: 10px;
   padding: 0.55rem 0.65rem;
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
   outline: none;
 }
 
@@ -378,7 +378,7 @@
   border-radius: 12px;
   padding: 0.65rem 0.75rem;
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
   outline: none;
   resize: vertical;
   min-height: 84px;
@@ -417,7 +417,7 @@
 
 .note-annotation-action.secondary {
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
   border-color: var(--border-strong);
 }
 
@@ -427,7 +427,7 @@
 
 .note-annotation-action.subtle {
   background: transparent;
-  color: var(--text-light);
+  color: var(--text-secondary);
   border-color: var(--border-strong);
 }
 
@@ -470,7 +470,7 @@
   padding: 0;
   background: transparent;
   outline: none;
-  color: var(--text-dark);
+  color: var(--text-primary);
   line-height: 1.7;
   /* Make the default note text larger than the rest of the app. */
   font-size: 1.15rem;
@@ -530,7 +530,7 @@
   border-left: 4px solid var(--border-strong);
   padding-left: 1rem;
   margin: 0.75rem 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   background: var(--surface-2);
   border-radius: 8px;
 }
@@ -587,7 +587,7 @@
 .modal-title {
   font-weight: 800;
   font-size: 1.1rem;
-  color: var(--text-dark);
+  color: var(--text-primary);
   margin-bottom: 0.75rem;
 }
 
@@ -596,7 +596,7 @@
   flex-direction: column;
   gap: 0.35rem;
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-top: 0.75rem;
 }
 
@@ -608,7 +608,7 @@
   font-size: 0.95rem;
   outline: none;
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
 
 .modal-input:focus {
@@ -650,7 +650,7 @@
 
 .modal-button.secondary {
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
   border-color: var(--border-strong);
 }
 
@@ -678,13 +678,13 @@
 }
 
 .suggestion-muted {
-  color: var(--text-light);
+  color: var(--text-secondary);
   font-size: 0.9rem;
   white-space: nowrap;
 }
 
 .suggestion-text-inline {
-  color: var(--text-dark);
+  color: var(--text-primary);
   font-size: 0.95rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -692,17 +692,17 @@
 }
 
 .transcript-text {
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .suggestion-text {
-  color: var(--text-light);
+  color: var(--text-secondary);
   pointer-events: none;
   user-select: none;
 }
 
 .ghost-text {
-  color: var(--text-light);
+  color: var(--text-secondary);
   pointer-events: none;
   display: inline;
 }
@@ -721,7 +721,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  background: var(--surface);
+  background: #252D3A;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.5rem 0.75rem;

@@ -1,6 +1,6 @@
 .features {
   padding: 4rem 5%;
-  background-color: black;
+  background-color: #1F2937;
 }
 
 .features h2 {
@@ -19,7 +19,7 @@
 }
 
 .feature-card {
-  background: black;
+  background: #1F2937;
   padding: 2rem;
   border-radius: 12px;
   border: 2px solid rgba(20, 184, 165, 0.234);

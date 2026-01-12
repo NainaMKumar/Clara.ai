@@ -168,7 +168,7 @@
   height: 32px;
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -176,7 +176,7 @@
 
 .rag-sidebar-close:hover {
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
 
 .sr-only {
@@ -199,12 +199,12 @@
 
 .rag-title {
   font-weight: 700;
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
 
 .rag-status {
   font-size: 0.85rem;
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .rag-actions {
@@ -230,7 +230,7 @@
 }
 
 .rag-empty-state p {
-  color: var(--text-light);
+  color: var(--text-secondary);
   font-size: 1.05rem;
   line-height: 1.5;
   margin: 0;
@@ -250,7 +250,7 @@
 
 .rag-message--assistant {
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
   margin-right: 1.5rem;
 }
 
@@ -268,7 +268,7 @@
 }
 
 .rag-message--assistant .rag-message-role {
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .rag-message-content {
@@ -294,7 +294,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-light);
+  background: var(--text-secondary);
   animation: rag-typing 1.4s infinite ease-in-out both;
 }
 
@@ -328,7 +328,7 @@
 
 .rag-message--assistant .rag-citations-title {
   font-size: 0.8rem;
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .rag-input-row {
@@ -348,11 +348,11 @@
   outline: none;
   font-size: 1.05rem;
   background: var(--surface-2);
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
 
 .rag-input::placeholder {
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .rag-input:focus {
@@ -383,7 +383,7 @@
 .rag-button.secondary {
   background: var(--surface-2);
   border-color: var(--border-strong);
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .rag-button.secondary:hover:not(:disabled) {
@@ -416,7 +416,7 @@
 
 .rag-answer {
   white-space: pre-wrap;
-  color: var(--text-dark);
+  color: var(--text-primary);
   line-height: 1.5;
 }
 
@@ -426,7 +426,7 @@
 
 .rag-citations-title {
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-bottom: 0.25rem;
 }
 
@@ -455,7 +455,7 @@
 }
 
 .rag-citation-quote {
-  color: var(--text-light);
+  color: var(--text-secondary);
 }
 
 .citation-jump {
@@ -469,12 +469,12 @@
 
 .citation-jump-label {
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
 .citation-jump-quote {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -488,7 +488,7 @@
   padding: 0.45rem 0.7rem;
   font-weight: 600;
   cursor: pointer;
-  color: var(--text-dark);
+  color: var(--text-primary);
 }
 
 .citation-jump-clear:hover {

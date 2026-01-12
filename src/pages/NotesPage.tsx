@@ -56,7 +56,8 @@ const NotesPage: React.FC = () => {
   const [isSidebarPinned, setIsSidebarPinned] = useState(() => {
     try {
       const raw = localStorage.getItem('clara_sidebar_pinned')
-      return raw === 'true'
+      // Default to pinned if no value exists, otherwise respect the stored value
+      return raw === null ? true : raw === 'true'
     } catch {
       return true // Default to pinned
     }

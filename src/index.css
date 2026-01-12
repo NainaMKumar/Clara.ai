@@ -10,6 +10,15 @@
   --teal-dark: #0D9488;
   --text-dark: #1F2937;
   --text-light: #6B7280;
+  
+  /* Light text for dark backgrounds */
+  --text-primary: #F3F4F6;
+  --text-secondary: #D1D5DB;
+
+  /* Background colors */
+  --bg-dark: #1F2937;
+  --bg: #1F2937;
+
   /* paragraph font (DM Sans is loaded in index.html) */
   --font-paragraph: "Poppins", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
@@ -29,8 +38,8 @@ body {
     Helvetica,
     Arial,
     sans-serif;
-  background-color: #000000; /* ensure no white strip shows behind fixed navbar */
-  color: var(--text-dark);
+  background-color: var(--bg-dark); /* ensure no white strip shows behind fixed navbar */
+  color: var(--text-primary);
   line-height: 1.55;
   font-size: 1rem;
 }
