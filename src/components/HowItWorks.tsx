@@ -1,5 +1,6 @@
 import React from 'react'
 import './HowItWorks.css'
+import diagram from './how_it_works_3.png'
 
 interface Step {
   number: number
@@ -34,7 +35,8 @@ const HowItWorks: React.FC = () => {
   return (
     <section className="how-it-works" id="how-it-works">
       <h2>How It Works</h2>
-      <div className="steps">
+      <img src={diagram} alt="Diagram" className="diagram"/>
+      {/* <div className="steps">
         {steps.map((step) => (
           <div key={step.number} className="step">
             <div className="step-number">{step.number}</div>
@@ -44,7 +46,7 @@ const HowItWorks: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+      </div> */}
     </section>
   )
 }

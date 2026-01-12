@@ -1,13 +1,12 @@
 .navbar {
-  background-color: rgba(0, 0, 0, 0.85);
+  background-color: black;
   padding: 1rem 2%;
   position: fixed;
   width: 100%;
   top: 0;
   z-index: 1000;
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  border-bottom: none;
 }
 
 .navbar-container {
@@ -19,19 +18,20 @@
   padding-left: 10rem;
   padding-right: 15rem;
 }
-
+.clara-logo {
+  height: 90px;
+  width: auto;
+}
 .logo {
-  font-size: 2.0rem;
+  font-size: 2.25rem;
   font-weight: bold;
-  color: var(--teal);
+  color: white;
   text-decoration: none;
-  text-shadow: var(--glow-sm);
-  transition: text-shadow 0.3s ease;
 }
+/* .logo:hover{
+  color: var(--teal);
+} */
 
-.logo:hover {
-  text-shadow: var(--glow-md);
-}
 
 .nav-links {
   display: flex;
@@ -41,25 +41,34 @@
 }
 
 .nav-links a {
-  color: var(--text-dark);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px; /* same width for all boxes — change to suit */
+  box-sizing: border-box;
+  color: white;
   text-decoration: none;
+  font-size: 1.15rem;
+  border-radius: 12px;
+  padding: 10px;
+  border: 2px solid rgba(20, 184, 165, 0.234);
   transition: all 0.3s ease;
-  font-size: 1.25rem;
+  border-color: var(--text-light);
+  text-align: center;
 }
 
 .nav-links a:hover {
-  color: var(--teal);
-  text-shadow: var(--glow-sm);
+  border-color: var(--teal);
+  transform: translateY(-8px);
 }
 
 .nav-links .cta-button {
   color: white;
-  text-shadow: none;
+  border: 2px solid var(--text-light);
 }
 
 .nav-links .cta-button:hover {
   color: white;
-  text-shadow: none;
 }
 
 .cta-button {
@@ -70,13 +79,12 @@
   font-weight: 600;
   font-size: 0.95rem;
   transition: all 0.3s ease;
-  box-shadow: var(--glow-sm);
 }
 
 .cta-button:hover {
   background-color: var(--teal-dark);
-  transform: translateY(-2px);
-  box-shadow: var(--glow-lg);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.3);
 }
 
 @media (max-width: 768px) {

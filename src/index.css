@@ -5,38 +5,13 @@
 }
 
 :root {
-  /* More green-shifted teal accent */
-  --teal: #10B981;
-  --teal-dark: #059669;
-  --teal-glow: rgba(16, 185, 129, 0.5);
-  --teal-glow-strong: rgba(16, 185, 129, 0.7);
-  
-  /* Dark gray theme */
-  --bg: #1a1a1a;
-  --surface: #212121;
-  --surface-2: #2a2a2a;
-  --surface-3: #333333;
-
-  --text-dark: #e5e7eb;
-  --text-light: #9ca3af;
-  --text-muted: #cbd5e1;
-
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  --shadow-soft: 0 6px 20px rgba(0, 0, 0, 0.4);
-  
-  /* Glowing focus and accent effects */
-  --focus-ring: 0 0 0 3px var(--teal-glow);
-  --glow-sm: 0 0 10px var(--teal-glow);
-  --glow-md: 0 0 20px var(--teal-glow), 0 0 40px rgba(16, 185, 129, 0.25);
-  --glow-lg: 0 0 30px var(--teal-glow-strong), 0 0 60px var(--teal-glow);
-
-  /* Back-compat aliases used across the app */
-  --white: var(--bg);
-
-  color-scheme: dark;
+  --white: #ffffff;
+  --teal: #14B8A6;
+  --teal-dark: #0D9488;
+  --text-dark: #1F2937;
+  --text-light: #6B7280;
+  /* paragraph font (DM Sans is loaded in index.html) */
+  --font-paragraph: "Poppins", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 html {
@@ -54,7 +29,7 @@ body {
     Helvetica,
     Arial,
     sans-serif;
-  background-color: var(--bg);
+  background-color: #000000; /* ensure no white strip shows behind fixed navbar */
   color: var(--text-dark);
   line-height: 1.55;
   font-size: 1rem;
@@ -62,18 +37,4 @@ body {
 
 button {
   font-family: inherit;
-}
-
-a {
-  color: var(--teal);
-  text-shadow: 0 0 8px var(--teal-glow);
-}
-
-a:hover {
-  color: var(--teal-dark);
-  text-shadow: 0 0 12px var(--teal-glow-strong);
-}
-
-::selection {
-  background: rgba(16, 185, 129, 0.3);
 }

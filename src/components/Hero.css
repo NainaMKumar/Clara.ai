@@ -1,7 +1,7 @@
 .hero {
   margin-top: 80px;
   padding: 4rem 5% 3rem;
-  background: var(--bg);
+  background: black;
   text-align: center;
 }
 
@@ -13,12 +13,12 @@
 .hero h1 {
   font-size: 3.0rem;
   margin-bottom: 1.5rem;
-  color: var(--text-dark);
+  color: white;
   line-height: 1.2;
 }
 
 .hero h1 .typed-text {
-  color: var(--text-dark);
+  color: white;
   font-weight: 700;
 }
 
@@ -27,7 +27,6 @@
   font-weight: 400;
   animation: blink 1s infinite;
   margin-left: 2px;
-  text-shadow: var(--glow-sm);
 }
 
 @keyframes blink {
@@ -40,13 +39,13 @@
 }
 
 .hero p {
-  font-size: 1.50rem;
+  font-size: 1.45rem;
   margin-bottom: 2.5rem;
-  color: var(--text-light);
-  background-color: rgba(255, 255, 255, 0.03);
+  color: rgb(221, 220, 220);
+  /* background-color: rgba(20, 184, 166, 0.05); */
   padding: 2rem;
   border-radius: 12px;
-  border: 1px solid var(--border);
+  /* border: 1px solid rgba(20, 184, 166, 0.2); */
 }
 
 .hero-buttons {
@@ -61,38 +60,37 @@
   color: white;
   padding: 0.85rem 2rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   text-decoration: none;
-  box-shadow: var(--glow-sm);
 }
 
 .btn-primary:hover {
   background-color: var(--teal-dark);
-  transform: translateY(-3px);
-  box-shadow: var(--glow-lg);
+  transform: translateY(-8px);
+  box-shadow: 0 12px 30px rgba(20, 184, 166, 0.4);
 }
 
 .btn-secondary {
   background-color: transparent;
-  color: var(--text-dark);
+  color: rgb(221, 220, 220);
   padding: 0.85rem 2rem;
   border: 2px solid var(--teal);
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 0 8px var(--teal-glow);
 }
 
 .btn-secondary:hover {
-  background-color: rgba(16, 185, 129, 0.1);
+  background-color: rgba(20, 184, 166, 0.1);
   border-color: var(--teal-dark);
-  box-shadow: var(--glow-md);
+  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.2);
+  transform: translateY(-8px);
 }
 
 @media (max-width: 768px) {

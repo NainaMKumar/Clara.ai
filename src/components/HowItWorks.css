@@ -1,13 +1,21 @@
 .how-it-works {
   padding: 5rem 5%;
-  background: var(--bg);
+  background: black;
 }
 
 .how-it-works h2 {
   text-align: center;
   font-size: 2.5rem;
   margin-bottom: 4rem;
-  color: var(--text-dark);
+  color: white;
+}
+
+.diagram {
+  /* center align image */
+  display: block;
+  margin: 0 auto 1rem auto;
+  width: 65%;
+  height: 65%;
 }
 
 .steps {
@@ -19,17 +27,17 @@
 }
 
 .step {
-  background: var(--surface);
+  background: white;
   padding: 3rem;
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transition: all 0.3s ease;
-  border: 2px solid var(--border-strong);
+  border: 2px solid #f3f4f6;
 }
 
 .step:hover {
   transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), var(--glow-md);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
   border-color: var(--teal);
 }
 
@@ -45,7 +53,6 @@
   font-size: 2rem;
   font-weight: bold;
   margin-bottom: 1.5rem;
-  box-shadow: var(--glow-md);
 }
 
 .step-content h3 {
