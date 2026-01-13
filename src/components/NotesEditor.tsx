@@ -428,7 +428,7 @@ function toEditorHtml(content: string) {
   return `<p>${escapeHtml(content).replace(/\n/g, '<br />')}</p>`;
 }
 
-const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate, isRagSidebarOpen }) => {
+const NotesEditor: React.FC<NotesEditorProps> = ({ note, onUpdate }) => {
   const [title, setTitle] = useState(note.title);
   const [isRecording, setIsRecording] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
