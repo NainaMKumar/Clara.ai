@@ -1,6 +1,6 @@
 import React from 'react'
 import './HowItWorks.css'
-import diagram from './how_it_works_3.png'
+import diagram from './how_it_works.png'
 
 // interface Step {
 //   number: number

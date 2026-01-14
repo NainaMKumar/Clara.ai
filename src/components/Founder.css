@@ -1,6 +1,6 @@
 .founder-content {
     text-align: center;
-    background-color: #1F2937;
+    background-color: var(--bg-dark);
 }
 h1 {
     color: white;

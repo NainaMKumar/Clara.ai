@@ -1,7 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import './Navbar.css'
-import clara_logo from './logo_design.png'
+import clara_logo from './logo_design_2.png'
 
 const Navbar: React.FC = () => {
   return (

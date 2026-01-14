@@ -20,12 +20,15 @@
 .sidebar-resize-handle {
   position: absolute;
   top: 0;
-  right: -4px;
-  width: 8px;
+  right: -9px;
+  width: 6px;
   height: 100%;
   cursor: col-resize;
-  z-index: 101;
-  background: transparent;
+  background-color: #cfcfcf;
+  border-right: 1px solid #f0f0f0;
+  /* Divider for dark theme / editor separation */
+  /* If you use a dark background for the page, prefer a subtle light divider: */
+  /* border-right: 1px solid rgba(255,255,255,0.06); */
   transition: background 0.15s ease;
 }
 
@@ -373,6 +376,18 @@
     height: auto;
   }
   
+
+/* Optional: sharper divider that sits above content and works with both light/dark backgrounds */
+.sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 1px;
+  height: 100%;
+  background: rgba(0,0,0,0.06); /* dark divider for light backgrounds */
+  pointer-events: none;
+}
   .sidebar.collapsed {
     transform: translateY(-100%);
   }

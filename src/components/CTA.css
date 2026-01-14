@@ -1,6 +1,6 @@
 .cta-section {
   padding: 5rem 5%;
-  background-color: #1F2937;
+  background-color: var(--bg-dark);
   text-align: center;
 }
 
