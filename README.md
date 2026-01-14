@@ -2,6 +2,8 @@
 
 AI-powered note-taking app built for students that seamlessly combines voice transcription with intelligent text completion. Clara gives you the flexibility of writing your own notes while AI assists you in real-time.
 
+Try our live demo here: https://use-clara-ai.vercel.app/
+
 ## Features
 
 ### 🎙️ Real-time Voice Transcription
